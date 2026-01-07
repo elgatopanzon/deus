@@ -14,33 +14,40 @@ class PipelineContext:
 			return null
 
 class ComponentRegistry:
-	var components = {} # maps node ids to component dictionaries
+	var components = {} # maps entity ids to component dictionaries
+	var next_entity_id: int = 0
+
+	func _ensure_entity_id(node: Node) -> int:
+		if not node.has_meta("entity_id"):
+			node.set_meta("entity_id", next_entity_id)
+			next_entity_id += 1
+		return node.get_meta("entity_id")
 
 	func set_component(node: Node, comp: Script, component: Resource) -> void:
-		var node_id = node.get_instance_id()
-		if not components.has(node_id):
-			components[node_id] = {}
-		components[node_id][comp.get_global_name()] = component
+		var entity_id = _ensure_entity_id(node)
+		if not components.has(entity_id):
+			components[entity_id] = {}
+		components[entity_id][comp.get_global_name()] = component
 
 	func get_component(node: Node, component_class: Script) -> Resource:
-		var node_id = node.get_instance_id()
-		if components.has(node_id):
-			if components[node_id].has(component_class.get_global_name()):
-				return components[node_id][component_class.get_global_name()]
+		var entity_id = _ensure_entity_id(node)
+		if components.has(entity_id):
+			if components[entity_id].has(component_class.get_global_name()):
+				return components[entity_id][component_class.get_global_name()]
 		return null
 
 	func has_component(node: Node, component_class: Script) -> bool:
 		return get_component(node, component_class) != null
 
 	func remove_component(node: Node, component_class: Script) -> void:
-		var node_id = node.get_instance_id()
-		if components.has(node_id):
+		var entity_id = _ensure_entity_id(node)
+		if components.has(entity_id):
 			var comp_name = component_class.get_global_name()
-			if components[node_id].has(comp_name):
-				components[node_id].erase(comp_name)
-				# remove node dictionary if now empty
-				if components[node_id].size() == 0:
-					components.erase(node_id)
+			if components[entity_id].has(comp_name):
+				components[entity_id].erase(comp_name)
+				# remove entity dictionary if now empty
+				if components[entity_id].size() == 0:
+					components.erase(entity_id)
 
 	func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 		if requires.size() > 0:
