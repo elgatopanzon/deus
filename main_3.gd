@@ -5,6 +5,7 @@ class PipelineContext:
 	var world
 	var components = {}
 	var payload
+	var result
 
 	# allows dot-access to components: context.CompName
 	func _get(property):
@@ -12,6 +13,33 @@ class PipelineContext:
 			return components[property]
 		else:
 			return null
+
+# pipeline result state
+class PipelineResult:
+	const SUCCESS = "success"
+	const FAILED = "failed"
+	const CANCELLED = "cancelled"
+	
+	var state: String = SUCCESS
+	var error_code: int = 0
+	var error_message: String = ""
+	
+	func reset():
+		state = SUCCESS
+		error_code = 0
+		error_message = ""
+
+	func noop():
+		state = SUCCESS
+
+	func fail(code = 1, msg = ""):
+		state = FAILED
+		error_code = code
+		error_message = msg
+
+	func cancel(msg = ""):
+		state = CANCELLED
+		error_message = msg
 
 class SparseSet:
 	var dense : Array = []
@@ -59,6 +87,7 @@ class SparseSet:
 class ComponentRegistry:
 	var component_sets = {}
 	var next_entity_id: int = 0
+	var node_components = {} # keeps track of nodes and their components (by name)
 
 	func _ensure_entity_id(node: Node) -> int:
 		if not node.has_meta("entity_id"):
@@ -66,42 +95,57 @@ class ComponentRegistry:
 			next_entity_id += 1
 		return node.get_meta("entity_id")
 
-	func _get_sparse_set(script: Script) -> SparseSet:
-		var name = script.get_global_name()
-		if not component_sets.has(name):
-			component_sets[name] = SparseSet.new()
-		return component_sets[name]
+	func _get_sparse_set(component_name: String) -> SparseSet:
+		if not component_sets.has(component_name):
+			component_sets[component_name] = SparseSet.new()
+		return component_sets[component_name]
 
-	func set_component(node: Node, comp: Script, component: Resource) -> void:
+	func set_component(node: Node, component_name: String, component: Resource) -> void:
 		var entity_id = _ensure_entity_id(node)
-		var components = _get_sparse_set(comp)
+		var components = _get_sparse_set(component_name)
 		components.add(entity_id, component)
+		if not node_components.has(node):
+			node_components[node] = []
+		if component_name not in node_components[node]:
+			node_components[node].append(component_name)
 
-	func get_component(node: Node, component_class: Script) -> Resource:
+	func get_component(node: Node, component_name: String) -> Resource:
 		var entity_id = _ensure_entity_id(node)
-		var components = _get_sparse_set(component_class)
+		var components = _get_sparse_set(component_name)
 		return components.get_value(entity_id)
 
-	func has_component(node: Node, component_class: Script) -> bool:
+	func has_component(node: Node, component_name: String) -> bool:
 		var entity_id = _ensure_entity_id(node)
-		var components = _get_sparse_set(component_class)
+		var components = _get_sparse_set(component_name)
 		return components.has(entity_id)
 
-	func remove_component(node: Node, component_class: Script) -> void:
+	func remove_component(node: Node, component_name: String) -> void:
 		var entity_id = _ensure_entity_id(node)
-		var components = _get_sparse_set(component_class)
+		var components = _get_sparse_set(component_name)
 		components.erase(entity_id)
+		if node_components.has(node):
+			node_components[node].erase(component_name)
+			if node_components[node].size() == 0:
+				node_components.erase(node)
 
 	func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 		if requires.size() > 0:
-			for comp in requires:
-				if not has_component(node, comp):
+			for comp_name in requires:
+				if not has_component(node, comp_name.get_global_name()):
 					return false
 		if exclude.size() > 0:
-			for comp in exclude:
-				if has_component(node, comp):
+			for comp_name in exclude:
+				if has_component(node, comp_name.get_global_name()):
 					return false
 		return true
+
+	# returns a list of nodes that have all required components and none of the excluded components
+	func get_matching_nodes(requires: Array, exclude: Array) -> Array:
+		var result = []
+		for node in node_components.keys():
+			if components_match(node, requires, exclude):
+				result.append(node)
+		return result
 
 class PipelineManager:
 	var pipelines = {}
@@ -164,11 +208,12 @@ class PipelineManager:
 		var context := PipelineContext.new()
 		context.world = world
 		for comp in components:
-			var instance = component_registry.get_component(node, comp)
+			var instance = component_registry.get_component(node, comp.get_global_name())
 			if instance != null:
 				context.components[comp.get_global_name()] = instance
-		# payload is always empty at start
 		context.payload = null
+		context.result = PipelineResult.new()
+		context.result.reset()
 		return context
 
 	func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext, component_registry: ComponentRegistry, world: Object) -> void:
@@ -180,30 +225,44 @@ class PipelineManager:
 			var optional = pipelines[pipeline_name]["optional"]
 			var exclude = pipelines[pipeline_name]["exclude"]
 			if not component_registry.components_match(node, requires, exclude):
+				context.result.noop()
 				return
-			self.run(stage_or_pipeline, node, component_registry, world, context.payload, context)
+			var sub_result = self.run(stage_or_pipeline, node, component_registry, world, context.payload, context)
+			if sub_result.result.state != PipelineResult.SUCCESS:
+				context.result = sub_result.result
+				return
 			var add_ctx = _create_context_from_node(world, node, requires + optional, component_registry)
 			for key in add_ctx.components.keys():
 				context.components[key] = add_ctx.components[key]
 
-	func run(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, payload = null, context_override = null) -> void:
+	func run(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, payload = null, context_override = null) -> Dictionary:
 		var pipeline_name = pipeline_class.get_global_name()
 		if not pipelines.has(pipeline_name):
-			return
+			return {"context": null, "result": PipelineResult.new()}
 		var requires = pipelines[pipeline_name]["requires"]
 		var optional = pipelines[pipeline_name]["optional"]
 		var exclude = pipelines[pipeline_name]["exclude"]
 		if not component_registry.components_match(node, requires, exclude):
-			return
+			var result_fail = PipelineResult.new()
+			result_fail.noop()
+			return {"context": null, "result": result_fail}
 		var stages = pipelines[pipeline_name]["stages"]
 		var context = context_override
 		if context_override == null:
 			context = _create_context_from_node(world, node, requires + optional, component_registry)
+		context.result.reset()
 		if payload != null:
 			context.payload = payload
 		for stage in stages.keys():
+			if context.result.state != PipelineResult.SUCCESS:
+				break
 			for fn_or_pipe in stages[stage]:
 				_call_stage_or_pipeline(fn_or_pipe, node, context, component_registry, world)
+				if context.result.state != PipelineResult.SUCCESS:
+					break
+			if context.result.state != PipelineResult.SUCCESS:
+				break
+		return {"context": context, "result": context.result}
 
 class World extends Node:
 	var component_registry
@@ -215,16 +274,16 @@ class World extends Node:
 
 	# component methods
 	func set_component(node: Node, comp: Script, component: Resource) -> void:
-		component_registry.set_component(node, comp, component)
+		component_registry.set_component(node, comp.get_global_name(), component)
 	
 	func get_component(node: Node, component_class: Script) -> Resource:
-		return component_registry.get_component(node, component_class)
+		return component_registry.get_component(node, component_class.get_global_name())
 
 	func has_component(node: Node, component_class: Script) -> bool:
-		return component_registry.has_component(node, component_class)
+		return component_registry.has_component(node, component_class.get_global_name())
 
 	func remove_component(node: Node, component_class: Script) -> void:
-		component_registry.remove_component(node, component_class)
+		component_registry.remove_component(node, component_class.get_global_name())
 
 	# pipeline methods
 	func register_pipeline(pipeline_class: Script) -> void:
@@ -239,8 +298,21 @@ class World extends Node:
 	func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> void:
 		pipeline_manager.uninject_pipeline(injected_fn_or_pipeline, target_callable)
 
-	func execute_pipeline(pipeline_class: Script, node: Node, payload = null, context_override = null) -> void:
-		pipeline_manager.run(pipeline_class, node, component_registry, self, payload, context_override)
+	func execute_pipeline(pipeline_class: Script, node: Node, payload = null, context_override = null) -> Dictionary:
+		return pipeline_manager.run(pipeline_class, node, component_registry, self, payload, context_override)
+
+	func execute_global_pipeline(pipeline_class: Script, payload = null, context_override = null) -> Dictionary:
+		var pipeline_info = pipeline_manager.pipelines.get(pipeline_class.get_global_name())
+		if pipeline_info == null:
+			return {}
+		var requires = pipeline_info["requires"]
+		var exclude = pipeline_info["exclude"]
+		var nodes = component_registry.get_matching_nodes(requires, exclude)
+		var node_results = {}
+		for node in nodes:
+			var ret = pipeline_manager.run(pipeline_class, node, component_registry, self, payload, context_override)
+			node_results[node] = ret.result
+		return node_results
 
 func _ready():
 	var world = World.new()
@@ -269,8 +341,7 @@ func _ready():
 		assert(world.get_component(nodes[i], Damage).value == 10 + i, "Damage value incorrect before pipeline, node %d: expected %d, got %d" % [i, 10 + i, world.get_component(nodes[i], Damage).value])
 
 	# run DamagePipeline on all nodes with components
-	for i in range(N):
-		world.execute_pipeline(DamagePipeline, nodes[i])
+	var global_results = world.execute_global_pipeline(DamagePipeline)
 
 	# validate results
 	for i in range(N):
@@ -279,6 +350,8 @@ func _ready():
 		var expected_health = (100 + i) + (i + 10) + expected_damage
 		assert(world.get_component(nodes[i], Damage).value == expected_damage, "Damage value incorrect after pipeline, node %d: expected %d, got %d" % [i, expected_damage, world.get_component(nodes[i], Damage).value])
 		assert(world.get_component(nodes[i], Health).value == expected_health, "Health value incorrect after pipeline, node %d: expected %d, got %d" % [i, expected_health, world.get_component(nodes[i], Health).value])
+		assert(global_results.has(nodes[i]))
+		assert(global_results[nodes[i]].state == global_results[nodes[i]].SUCCESS, "Pipeline result for node %d: expected success, got %s" % [i, global_results[nodes[i]].state])
 
 	# test removal
 	for i in range(N):
