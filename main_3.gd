@@ -6,15 +6,58 @@ class PipelineContext:
 	var components = {}
 	var payload
 
-    # allows dot-access to components: context.CompName
+	# allows dot-access to components: context.CompName
 	func _get(property):
 		if components.has(property):
 			return components[property]
 		else:
 			return null
 
+class SparseSet:
+	var dense : Array = []
+	var sparse : Array = []
+	var data : Array = []
+	
+	func add(entity_id: int, value):
+		if entity_id >= sparse.size():
+			var old_size = sparse.size()
+			sparse.resize(entity_id + 1)
+			for i in range(old_size, sparse.size()):
+				sparse[i] = -1
+		if self.has(entity_id):
+			data[sparse[entity_id]] = value
+			return
+		sparse[entity_id] = dense.size()
+		dense.append(entity_id)
+		data.append(value)
+	
+	func has(entity_id: int) -> bool:
+		return entity_id < sparse.size() and sparse[entity_id] != -1 and sparse[entity_id] < dense.size() and dense[sparse[entity_id]] == entity_id
+
+	func get_value(entity_id: int):
+		if self.has(entity_id):
+			return data[sparse[entity_id]]
+		return null
+	
+	func erase(entity_id: int):
+		if not self.has(entity_id):
+			return
+		var index = sparse[entity_id]
+		var last = dense.size() - 1
+		var last_entity = dense[last]
+
+		# swap with last
+		dense[index] = dense[last]
+		data[index] = data[last]
+		sparse[last_entity] = index
+
+		# remove last
+		dense.resize(last)
+		data.resize(last)
+		sparse[entity_id] = -1
+
 class ComponentRegistry:
-	var components = {} # maps entity ids to component dictionaries
+	var component_sets = {}
 	var next_entity_id: int = 0
 
 	func _ensure_entity_id(node: Node) -> int:
@@ -23,31 +66,31 @@ class ComponentRegistry:
 			next_entity_id += 1
 		return node.get_meta("entity_id")
 
+	func _get_sparse_set(script: Script) -> SparseSet:
+		var name = script.get_global_name()
+		if not component_sets.has(name):
+			component_sets[name] = SparseSet.new()
+		return component_sets[name]
+
 	func set_component(node: Node, comp: Script, component: Resource) -> void:
 		var entity_id = _ensure_entity_id(node)
-		if not components.has(entity_id):
-			components[entity_id] = {}
-		components[entity_id][comp.get_global_name()] = component
+		var components = _get_sparse_set(comp)
+		components.add(entity_id, component)
 
 	func get_component(node: Node, component_class: Script) -> Resource:
 		var entity_id = _ensure_entity_id(node)
-		if components.has(entity_id):
-			if components[entity_id].has(component_class.get_global_name()):
-				return components[entity_id][component_class.get_global_name()]
-		return null
+		var components = _get_sparse_set(component_class)
+		return components.get_value(entity_id)
 
 	func has_component(node: Node, component_class: Script) -> bool:
-		return get_component(node, component_class) != null
+		var entity_id = _ensure_entity_id(node)
+		var components = _get_sparse_set(component_class)
+		return components.has(entity_id)
 
 	func remove_component(node: Node, component_class: Script) -> void:
 		var entity_id = _ensure_entity_id(node)
-		if components.has(entity_id):
-			var comp_name = component_class.get_global_name()
-			if components[entity_id].has(comp_name):
-				components[entity_id].erase(comp_name)
-				# remove entity dictionary if now empty
-				if components[entity_id].size() == 0:
-					components.erase(entity_id)
+		var components = _get_sparse_set(component_class)
+		components.erase(entity_id)
 
 	func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 		if requires.size() > 0:
@@ -180,6 +223,9 @@ class World extends Node:
 	func has_component(node: Node, component_class: Script) -> bool:
 		return component_registry.has_component(node, component_class)
 
+	func remove_component(node: Node, component_class: Script) -> void:
+		component_registry.remove_component(node, component_class)
+
 	# pipeline methods
 	func register_pipeline(pipeline_class: Script) -> void:
 		pipeline_manager.register_pipeline(pipeline_class)
@@ -204,28 +250,57 @@ func _ready():
 
 	world.inject_pipeline(ReverseDamagePipeline, DamagePipeline._stage_deduct, true)
 
-	var node1 = Node.new()
-	var health_comp = Health.new()
-	health_comp.value = 100
-	var damage_comp = Damage.new()
-	damage_comp.value = 10
+	# create nodes to stress test pipelines and components
+	const N = 100
+	var nodes = []
+	for i in range(N):
+		var node = Node.new()
+		var health = Health.new()
+		health.value = 100 + i
+		var damage = Damage.new()
+		damage.value = 10 + i
+		world.set_component(node, Health, health)
+		world.set_component(node, Damage, damage)
+		nodes.append(node)
 
-	var node2 = Node.new()
+	# validate before running pipelines
+	for i in range(N):
+		assert(world.get_component(nodes[i], Health).value == 100 + i, "Health value incorrect before pipeline, node %d: expected %d, got %d" % [i, 100 + i, world.get_component(nodes[i], Health).value])
+		assert(world.get_component(nodes[i], Damage).value == 10 + i, "Damage value incorrect before pipeline, node %d: expected %d, got %d" % [i, 10 + i, world.get_component(nodes[i], Damage).value])
 
-	world.set_component(node1, Health, health_comp)
-	world.set_component(node1, Damage, damage_comp)
+	# run DamagePipeline on all nodes with components
+	for i in range(N):
+		world.execute_pipeline(DamagePipeline, nodes[i])
 
-	print("Node health before: ", world.get_component(node1, Health).value)
-	print("Node damage before: ", world.get_component(node1, Damage).value)
+	# validate results
+	for i in range(N):
+		# ReverseDamagePipeline sets Damage * -1, so value is now negative, and Deduct applies it to health making it positive
+		var expected_damage = 0
+		var expected_health = (100 + i) + (i + 10) + expected_damage
+		assert(world.get_component(nodes[i], Damage).value == expected_damage, "Damage value incorrect after pipeline, node %d: expected %d, got %d" % [i, expected_damage, world.get_component(nodes[i], Damage).value])
+		assert(world.get_component(nodes[i], Health).value == expected_health, "Health value incorrect after pipeline, node %d: expected %d, got %d" % [i, expected_health, world.get_component(nodes[i], Health).value])
 
-	world.execute_pipeline(DamagePipeline, node1)
-	world.execute_pipeline(DamagePipeline, node2)
+	# test removal
+	for i in range(N):
+		world.remove_component(nodes[i], Damage)
+		assert(world.has_component(nodes[i], Damage) == false, "Damage component was not removed for node %d" % i)
+	
+	# test that adding and erasing works repeatedly
+	for i in range(N):
+		var damage = Damage.new()
+		damage.value = 20 + i
+		world.set_component(nodes[i], Damage, damage)
+		assert(world.get_component(nodes[i], Damage).value == 20 + i, "Damage value incorrect after adding, node %d: expected %d, got %d" % [i, 20 + i, world.get_component(nodes[i], Damage).value])
+		world.remove_component(nodes[i], Damage)
+		assert(world.has_component(nodes[i], Damage) == false, "Damage component was not removed for node %d (repeat test)" % i)
+	
+	print("All component and pipeline stress tests passed")
 
-	print("Node health after: ", world.get_component(node1, Health).value)
-	print("Node damage after: ", world.get_component(node1, Damage).value)
-
+	# check singleton example
 	var h = Health.new()
-	h.value = 123
+	h.value = 999
 	world.set_component(world, Health, h)
-
-	print("Singleton health: ", world.get_component(world, Health).value)
+	assert(world.get_component(world, Health).value == 999, "Singleton health set/get failed: expected 999, got %d" % world.get_component(world, Health).value)
+	world.remove_component(world, Health)
+	assert(world.has_component(world, Health) == false, "Singleton health removal failed")
+	print("Singleton health removal passed")
