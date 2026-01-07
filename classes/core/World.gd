@@ -13,9 +13,28 @@ extends Node
 var component_registry
 var pipeline_manager
 
+static var instance: World
+
+var delta: float
+var delta_fixed: float
+
 func _init():
 	component_registry = ComponentRegistry.new()
 	pipeline_manager = PipelineManager.new()
+
+	# register world pipelines
+	register_pipeline(WorldUpdatePipeline)
+	register_pipeline(WorldFixedUpdatePipeline)
+
+	instance = self
+
+func _process(_delta):
+	delta = _delta
+	execute_pipeline(WorldUpdatePipeline, self)
+
+func _physics_process(_delta):
+	delta_fixed = _delta
+	execute_pipeline(WorldFixedUpdatePipeline, self)
 
 # component methods
 func set_component(node: Node, comp: Script, component: Resource) -> void:
