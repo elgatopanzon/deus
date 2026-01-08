@@ -10,7 +10,10 @@ func _ready():
 	const N = 100
 	var nodes = []
 	for i in range(N):
-		var node = Node.new()
+		var node = StaticBody2D.new()
+		var area2d = Area2D.new()
+		area2d.name = "Area"
+		node.add_child(area2d)
 		var health = Health.new()
 		health.value = 100 + i
 		var damage = Damage.new()

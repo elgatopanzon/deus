@@ -16,7 +16,9 @@ func _get_pipeline_class_components(pipeline_class: Script) -> Dictionary:
 	var result = {
 		"requires": [],
 		"optional": [],
-		"exclude": []
+		"exclude": [],
+		"require_nodes": [],
+		"exclude_nodes": []
 	}
 	var method_list = pipeline_class.get_script_method_list()
 	for method in method_list:
@@ -26,33 +28,60 @@ func _get_pipeline_class_components(pipeline_class: Script) -> Dictionary:
 			result["optional"] = pipeline_class._optional()
 		elif method.name == "_exclude":
 			result["exclude"] = pipeline_class._exclude()
+		elif method.name == "_require_nodes":
+			result["require_nodes"] = _class_type_array_to_string_array(pipeline_class._require_nodes())
+		elif method.name == "_exclude_nodes":
+			result["exclude_nodes"] = _class_type_array_to_string_array(pipeline_class._exclude_nodes())
 	return result
+
+# helper function to convert classes/scripts/types of an array to strings
+func _class_type_array_to_string_array(arr: Array) -> Array:
+	var result = []
+	for item in arr:
+		var iset = []
+
+		if typeof(item) != TYPE_ARRAY:
+			iset.append(_type_to_string(item))
+		else:
+			for set_item in item:
+				iset.append(_type_to_string(set_item))
+
+		result.append(iset)
+	return result
+
+func _type_to_string(item):
+	# todo: test this with custom types and inherited custom types
+	if typeof(item) == TYPE_OBJECT and item is Script:
+		return item.get_global_name()
+	# this should work for native classes
+	elif typeof(item) == TYPE_OBJECT:
+		return item.new().get_class()
+	else:
+		return str(item)
 
 func register_pipeline(pipeline_class: Script) -> void:
 	var name = pipeline_class.get_global_name()
 	var stages = {}
 
-	# first try to get explicit stage list
 	if pipeline_class.has_method("_stages"):
 		var stage_methods = pipeline_class._stages()
 		for stage_method in stage_methods:
 			var stage_name = name + "." + str(stage_method.get_method())
 			stages[stage_name] = [stage_method]
-	
-	# fallback to magic stage detection
 	else:
 		for m in pipeline_class.get_script_method_list():
 			if m.name.begins_with("_stage_"):
 				var stage_name = name + "." + m.name
 				stages[stage_name] = [Callable(pipeline_class, m.name)]
 
-	# create pipeline definition
 	var components = _get_pipeline_class_components(pipeline_class)
 	pipelines[name] = {
 		"stages": stages.duplicate(true),
 		"requires": components["requires"].duplicate(),
 		"optional": components["optional"].duplicate(),
 		"exclude": components["exclude"].duplicate(),
+		"require_nodes": components["require_nodes"].duplicate(),
+		"exclude_nodes": components["exclude_nodes"].duplicate(),
 	}
 
 func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before: bool = false, priority: int = 0) -> void:
@@ -78,6 +107,36 @@ func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> vo
 		if pipelines[pipeline_class_name]["stages"].has(stage_func):
 			pipelines[pipeline_class_name]["stages"][stage_func].erase(injected_fn_or_pipeline)
 
+func _matches_node_type_or_name(node: Node, sets: Array) -> bool:
+	var found = []
+	for i in sets.size():
+		var entry = sets[i]
+		var matched = false
+
+		for set_entry in entry:
+			if i == 0:
+				# only check the owner (node itself) for the first entry
+				if typeof(set_entry) == TYPE_STRING:
+					if node.name == set_entry or node.get_class() == set_entry:
+						matched = true
+			else:
+				# check children for items 2+
+				for child in node.get_children():
+					if typeof(set_entry) == TYPE_STRING and (child.name == set_entry or child.get_class() == set_entry):
+						matched = true
+						break
+			found.append(matched)
+
+	# all entries in types_or_names must be found
+	return found.size() > 0 and not found.has(false)
+
+func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
+	if require.size() > 0 and not _matches_node_type_or_name(node, require):
+		return false
+	if exclude.size() > 0 and _matches_node_type_or_name(node, exclude):
+		return false
+	return true
+
 func _create_context_from_node(world: Object, node: Node, components: Array, component_registry: ComponentRegistry) -> PipelineContext:
 	var context := PipelineContext.new()
 	context.world = world
@@ -98,7 +157,9 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 		var requires = pipelines[pipeline_name]["requires"]
 		var optional = pipelines[pipeline_name]["optional"]
 		var exclude = pipelines[pipeline_name]["exclude"]
-		if not component_registry.components_match(node, requires, exclude):
+		var require_nodes = pipelines[pipeline_name]["require_nodes"]
+		var exclude_nodes = pipelines[pipeline_name]["exclude_nodes"]
+		if not component_registry.components_match(node, requires, exclude) or not _nodes_match(node, require_nodes, exclude_nodes):
 			context.result.noop()
 			return
 		var sub_result = self.run(stage_or_pipeline, node, component_registry, world, context.payload, context)
@@ -116,7 +177,9 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 	var requires = pipelines[pipeline_name]["requires"]
 	var optional = pipelines[pipeline_name]["optional"]
 	var exclude = pipelines[pipeline_name]["exclude"]
-	if not component_registry.components_match(node, requires, exclude):
+	var require_nodes = pipelines[pipeline_name]["require_nodes"]
+	var exclude_nodes = pipelines[pipeline_name]["exclude_nodes"]
+	if not component_registry.components_match(node, requires, exclude) or not _nodes_match(node, require_nodes, exclude_nodes):
 		var result_fail = PipelineResult.new()
 		result_fail.noop()
 		return {"context": null, "result": result_fail}
