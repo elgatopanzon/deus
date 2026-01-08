@@ -31,10 +31,22 @@ func _get_pipeline_class_components(pipeline_class: Script) -> Dictionary:
 func register_pipeline(pipeline_class: Script) -> void:
 	var name = pipeline_class.get_global_name()
 	var stages = {}
-	for m in pipeline_class.get_script_method_list():
-		if m.name.begins_with("_stage_"):
-			var stage_name = name + "." + m.name
-			stages[stage_name] = [Callable(pipeline_class, m.name)]
+
+	# first try to get explicit stage list
+	if pipeline_class.has_method("_stages"):
+		var stage_methods = pipeline_class._stages()
+		for stage_method in stage_methods:
+			var stage_name = name + "." + str(stage_method.get_method())
+			stages[stage_name] = [stage_method]
+	
+	# fallback to magic stage detection
+	else:
+		for m in pipeline_class.get_script_method_list():
+			if m.name.begins_with("_stage_"):
+				var stage_name = name + "." + m.name
+				stages[stage_name] = [Callable(pipeline_class, m.name)]
+
+	# create pipeline definition
 	var components = _get_pipeline_class_components(pipeline_class)
 	pipelines[name] = {
 		"stages": stages.duplicate(true),
