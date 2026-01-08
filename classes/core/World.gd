@@ -28,6 +28,18 @@ func _init():
 
 	instance = self
 
+
+func _enter_tree():
+	# scenetree listeners
+	get_tree().connect("node_added", _on_node_added)
+	get_tree().connect("node_removed", _on_node_removed)
+
+func _on_node_added(node: Node):
+	print("node added to scenetree: %s: %s" % [node.name, node.get_path()])
+
+func _on_node_removed(node: Node):
+	print("node removed frome scenetree: %s: %s" % [node.name, node.get_path()])
+
 func _process(_delta):
 	delta = _delta
 	execute_pipeline(WorldUpdatePipeline, self)
