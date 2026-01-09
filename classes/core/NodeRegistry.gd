@@ -92,11 +92,24 @@ func try_get_node(target) -> Node:
 
 # process deferred signal connection queue on tree_changed
 func _try_connect_signal(target, signal_name: String, callable: Callable, flags: int = 0) -> bool:
+	var connected := false
 	var possible_node = try_get_node(target)
+
+	# if direct node found, try to connect
 	if possible_node and possible_node.has_signal(signal_name):
-		possible_node.connect(signal_name, callable, flags)
+		if not possible_node.is_connected(signal_name, callable):
+			possible_node.connect(signal_name, callable, flags)
 		return true
-	return false
+
+	# try by type or group
+	# note: keep connected as false to keep this as a persistent deferred connection
+	var nodes = get_nodes_by_type(target) + get_nodes_by_group(target)
+	if nodes.size() > 1:
+		for node in nodes:
+			if node.has_signal(signal_name) and not node.is_connected(signal_name, callable):
+				node.connect(signal_name, callable, flags)
+
+	return connected
 
 func _on_tree_changed():
 	var still_deferred : Array = []
