@@ -51,11 +51,14 @@ func _init_resources():
 	var parent = get_parent()
 
 	for res in resources:
-		var res_value = res.resource
-		if res.duplicate_resource:
-			res_value = res.resource.duplicate(res.duplicate_resource_deep)
+		if res.resource_id.length() > 0 and res.resource:
+			var res_value = res.resource
+			if res.duplicate_resource:
+				res_value = res.resource.duplicate(res.duplicate_resource_deep)
 
-		# TODO: implement a ResourceRegistry allowing nodes to define resources with a friendly id and access them
+			World.instance.register_resource(parent, res.resource, res.resource_id)
+
+
 
 func _init_signals_to_pipelines():
 	var parent = get_parent()

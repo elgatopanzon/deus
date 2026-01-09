@@ -13,6 +13,7 @@ extends Node
 var component_registry
 var pipeline_manager
 var node_registry
+var resource_registry
 
 static var instance: World
 
@@ -23,6 +24,7 @@ func _init():
 	component_registry = ComponentRegistry.new()
 	pipeline_manager = PipelineManager.new()
 	node_registry = NodeRegistry.new()
+	resource_registry = ResourceRegistry.new()
 
 	add_child(node_registry)
 
@@ -38,6 +40,7 @@ func _enter_tree():
 
 func _on_node_removed(node: Node, _node_name: String, _node_id: String):
 	component_registry.remove_all_components(node)
+	resource_registry.unregister_all_resources(node)
 
 func _process(_delta):
 	delta = _delta
@@ -85,6 +88,19 @@ func has_component(node: Node, component_class: Script) -> bool:
 
 func remove_component(node: Node, component_class: Script) -> void:
 	component_registry.remove_component(node, component_class.get_global_name())
+
+# resource methods
+func register_resource(node: Node, resource: Resource, resource_id: String) -> void:
+	resource_registry.register_resource(node, resource, resource_id)
+
+func get_resource(node: Node, resource_id: String) -> Resource:
+	return resource_registry.get_resource(node, resource_id)
+
+func unregister_resource(node: Node, resource_id: String) -> void:
+	resource_registry.unregister_resource(node, resource_id)
+
+func unregister_all_resources(node: Node) -> void:
+	resource_registry.unregister_all_resources(node)
 
 # pipeline methods
 func register_pipeline(pipeline_class: Script) -> void:

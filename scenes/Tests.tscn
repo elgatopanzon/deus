@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://bd6r8wnj5xa08" path="res://classes/core/EntityConfig.gd" id="4_crlaw"]
 [ext_resource type="Script" uid="uid://d2eap8f4cn4po" path="res://classes/core/ComponentConfig.gd" id="4_jnhux"]
 [ext_resource type="Script" uid="uid://d2eivmppis3sb" path="res://classes/components/Damage.gd" id="6_fbvdb"]
+[ext_resource type="Script" uid="uid://bnc2o8tdvuxq1" path="res://classes/core/ResourceConfig.gd" id="7_fbvdb"]
 [ext_resource type="Script" uid="uid://dpa7ha82ubr77" path="res://classes/core/SignalToPipelineConfig.gd" id="8_68fm8"]
 [ext_resource type="Script" uid="uid://djisnll356l4d" path="res://classes/pipelines/ButtonPressedPipeline.gd" id="9_saue4"]
 
@@ -22,6 +23,15 @@ metadata/_custom_type_script = "uid://d2eivmppis3sb"
 script = ExtResource("4_jnhux")
 component = SubResource("Resource_saue4")
 metadata/_custom_type_script = "uid://d2eap8f4cn4po"
+
+[sub_resource type="JSON" id="JSON_saue4"]
+data = null
+
+[sub_resource type="Resource" id="Resource_8sdur"]
+script = ExtResource("7_fbvdb")
+resource = SubResource("JSON_saue4")
+resource_id = "test_resource"
+metadata/_custom_type_script = "uid://bnc2o8tdvuxq1"
 
 [sub_resource type="Resource" id="Resource_hq3m6"]
 script = ExtResource("9_saue4")
@@ -53,5 +63,6 @@ script = ExtResource("3_uj06v")
 node_id = "custom_button"
 entity_config = SubResource("Resource_68fm8")
 components = Array[ExtResource("4_jnhux")]([SubResource("Resource_4vpgq")])
+resources = Array[ExtResource("7_fbvdb")]([SubResource("Resource_8sdur")])
 signals_to_pipelines = Array[ExtResource("8_68fm8")]([SubResource("Resource_ywxwr")])
 metadata/_custom_type_script = "uid://d038usdvtw50r"

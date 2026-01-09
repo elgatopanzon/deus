@@ -67,4 +67,4 @@ func _ready():
 
 	World.instance.RigidBody2D.queue_free()
 
-	# World.instance.signal_to_pipeline(World.instance.Button, "pressed", World.instance.Button, ButtonPressedPipeline)
+	print(World.instance.get_resource(World.instance.Button, "test_resource"))
