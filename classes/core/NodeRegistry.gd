@@ -20,37 +20,39 @@ var nodes_by_type: Dictionary = {}
 var nodes_by_group: Dictionary = {}
 var nodes_by_meta: Dictionary = {}
 
+# deferred signal connection request queue
+# items are dictionaries: {
+#    "target": <node_name, node_id, node_type, or node_group>,
+#    "signal": <signal_name>,
+#    "callable": <Callable>
+# }
+var deferred_signal_queue: Array = []
+
 func _enter_tree():
-	# connect to the scenetree signals once
 	var st = get_tree()
 	st.connect("node_added", Callable(self, "_on_node_added"))
 	st.connect("node_removed", Callable(self, "_on_node_removed"))
 	st.connect("node_renamed", Callable(self, "_on_node_renamed"))
+	st.connect("tree_changed", Callable(self, "_on_tree_changed"))
 
 # core function to add node to all registries
 func _register_node(node: Node):
-	# node name
 	nodes_by_name[node.name] = node
-	# node type
 	var t = node.get_class()
 	if not nodes_by_type.has(t):
 		nodes_by_type[t] = []
 	nodes_by_type[t].append(node)
-	# node groups
 	for group in node.get_groups():
 		if not nodes_by_group.has(group):
 			nodes_by_group[group] = []
 		nodes_by_group[group].append(node)
-	# meta id - if defined
 	var meta_id = ""
 	if node.has_meta("id"):
 		meta_id = node.get_meta("id")
 		if not nodes_by_meta.has(meta_id):
 			nodes_by_meta[meta_id] = node
-
 	node_registered.emit(node, node.name, meta_id)
 
-# remove node from all registries
 func _deregister_node(node: Node):
 	if nodes_by_name.has(node.name) and nodes_by_name[node.name] == node:
 		nodes_by_name.erase(node.name)
@@ -67,13 +69,13 @@ func _deregister_node(node: Node):
 	if node.has_meta("id"):
 		meta_id = node.get_meta("id")
 		if nodes_by_meta.has(meta_id):
-			nodes_by_meta[meta_id].erase(node)
-			if nodes_by_meta[meta_id].is_empty():
-				nodes_by_meta.erase(meta_id)
-
+			nodes_by_meta.erase(meta_id)
 	node_deregistered.emit(node, node.name, meta_id)
 
-# automatically called by the signals
+func set_node_id(node: Node, id: String):
+	node.set_meta("id", id)
+	nodes_by_meta[id] = node
+
 func _on_node_added(node: Node):
 	_register_node(node)
 
@@ -81,14 +83,44 @@ func _on_node_removed(node: Node):
 	_deregister_node(node)
 
 func _on_node_renamed(node: Node, old_name: String):
-	# update only the name registry for rename
 	if nodes_by_name.has(old_name) and nodes_by_name[old_name] == node:
 		nodes_by_name.erase(old_name)
 	nodes_by_name[node.name] = node
-
 	node_renamed.emit(node, node.name, old_name)
 
-# simple accessors
+# helper for deferred
+func try_get_node(target) -> Node:
+	if target is Node:
+		return target
+	var n = get_nodes_by_name(target)
+	if n != null:
+		return n
+	n = get_node_by_id(target)
+	if n != null:
+		return n
+	return null
+
+# process deferred signal connection queue on tree_changed
+func _try_connect_signal(target, signal_name: String, callable: Callable, flags: int = 0) -> bool:
+	var possible_node = try_get_node(target)
+	if possible_node.has_signal(signal_name):
+		possible_node.connect(signal_name, callable, flags)
+		return true
+	return false
+
+func _on_tree_changed():
+	var still_deferred : Array = []
+	for request in deferred_signal_queue:
+		if not _try_connect_signal(request.target, request.signal, request.callable):
+			still_deferred.append(request)
+	deferred_signal_queue = still_deferred
+
+# user API for deferred signal connection
+func connect_signal_deferred(target, signal_name: String, callable: Callable, flags: int):
+	var request = {"target": target, "signal": signal_name, "callable": callable, "flags": flags}
+	if not _try_connect_signal(target, signal_name, callable, flags):
+		deferred_signal_queue.append(request)
+
 func get_nodes_by_name(_name: String) -> Node:
 	return nodes_by_name.get(_name, null)
 

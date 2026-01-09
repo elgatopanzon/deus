@@ -52,16 +52,7 @@ func _physics_process(_delta):
 
 # node methods
 func _get(property):
-	# try by name
-	var node = get_node_by_name(property)
-	if node:
-		return node
-	# try by id
-	node = get_node_by_id(property)
-	if node:
-		return node
-
-	return null
+	return try_get_node(property)
 
 # search helper functions remain unchanged
 func get_node_by_name(_name):
@@ -75,6 +66,12 @@ func get_nodes_by_group(_group) -> Array:
 
 func get_node_by_id(_id) -> Node:
 	return node_registry.get_node_by_id(_id)
+
+func try_get_node(id):
+	return node_registry.try_get_node(id)
+
+func set_node_id(node: Node, id: String):
+	node_registry.set_node_id(node, id)
 
 # component methods
 func set_component(node: Node, comp: Script, component: Resource) -> void:
@@ -141,14 +138,25 @@ func execute_global_pipeline(pipeline_class: Script, payload = null, context_ove
 		node_results[node] = ret.result
 	return node_results
 
-func signal_to_pipeline(connect_node: Object, signal_name: String, target_node: Object, pipeline_class: Script, flags: int = 0) -> void:
+func signal_to_pipeline(connect_node, signal_name: String, target_node, pipeline_class: Script, flags: int = 0) -> void:
 	register_pipeline(pipeline_class)
-	connect_node.connect(signal_name, Callable(func(...args):
-		execute_pipeline(pipeline_class, target_node, [connect_node] + args)
-	), flags)
 
-func signal_to_global_pipeline(connect_node: Object, signal_name: String, pipeline_class: Script, flags: int = 0) -> void:
+	node_registry.connect_signal_deferred(connect_node, signal_name,
+		Callable(func(...args):
+			var target_ = World.instance.try_get_node(target_node)
+			var connect_ = World.instance.try_get_node(connect_node)
+			if target_ and connect_:
+				execute_pipeline(pipeline_class, target_, [connect_] + args)
+				)
+	, flags)
+
+func signal_to_global_pipeline(connect_node, signal_name: String, pipeline_class: Script, flags: int = 0) -> void:
 	register_pipeline(pipeline_class)
-	connect_node.connect(signal_name, Callable(func(...args):
-		execute_global_pipeline(pipeline_class, args)
-	), flags)
+
+	node_registry.connect_signal_deferred(connect_node, "", signal_name,
+		Callable(func(...args):
+			var connect_ = World.instance.try_get_node(connect_node)
+			if connect_:
+				execute_global_pipeline(pipeline_class, [connect_] + args)
+				)
+	, flags)

@@ -29,7 +29,7 @@ func _enter_tree():
 	var parent = get_parent()
 
 	if node_id.length() > 0:
-		parent.set_meta("id", node_id)
+		World.instance.set_node_id(parent, node_id)
 
 	_init_components()
 	_init_resources()
@@ -74,6 +74,6 @@ func _init_signals_to_pipelines():
 		if sig.execution_node_path:
 			target_node = parent.get_node(sig.execution_node_path)
 		elif sig.execution_node_id.length() > 0:
-			target_node = World.instance.get_node_by_id(sig.execution_node_id)
+			target_node = sig.execution_node_id
 
 		World.instance.signal_to_pipeline(connect_node, sig.signal_name, target_node, sig.pipeline.get_script())
