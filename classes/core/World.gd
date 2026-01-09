@@ -90,6 +90,10 @@ func remove_component(node: Node, component_class: Script) -> void:
 func register_pipeline(pipeline_class: Script) -> void:
 	pipeline_manager.register_pipeline(pipeline_class)
 
+func register_oneshot_pipeline(pipeline_class: Script, deregister_on_results: Array[String]) -> void:
+	pipeline_manager.register_pipeline(pipeline_class)
+	pipeline_manager.set_pipeline_as_oneshot(pipeline_class, deregister_on_results)
+
 func deregister_pipeline(pipeline_class: Script) -> void:
 	pipeline_manager.deregister_pipeline(pipeline_class)
 
@@ -101,6 +105,9 @@ func inject_pipeline_result_handler(existing_pipeline, target_pipeline, result_s
 
 func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> void:
 	pipeline_manager.uninject_pipeline(injected_fn_or_pipeline, target_callable)
+
+func pipeline_set_oneshot(pipeline_class: Script, deregister_on_results: Array[String]) -> void:
+	pipeline_manager.set_pipeline_as_oneshot(pipeline_class, deregister_on_results)
 
 func execute_pipeline(pipeline_class: Script, node: Node, payload = null, context_override = null) -> Dictionary:
 	return pipeline_manager.run(pipeline_class, node, component_registry, self, payload, context_override)

@@ -115,6 +115,12 @@ func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> vo
 	if pipelines.has(pipeline_class_name):
 		pipelines[pipeline_class_name]["stages"].get(stage_func, []).erase(injected_fn_or_pipeline)
 
+# enable one-shot mode on a pipeline to deregister it after running once
+func set_pipeline_as_oneshot(pipeline_class: Script, deregister_on_results: Array[String]) -> void:
+	var name = pipeline_class.get_global_name()
+	if pipelines.has(name):
+		pipelines[name]["oneshot"] = deregister_on_results.duplicate()
+
 # nodes matching helpers
 func _matches_node_type_or_name(node: Node, sets: Array) -> bool:
 	for i in sets.size():
@@ -163,6 +169,8 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 
 	elif typeof(stage_or_pipeline) == TYPE_OBJECT and stage_or_pipeline is Script:
 		var pipeline_name = stage_or_pipeline.get_global_name()
+		if not pipelines.has(pipeline_name):
+			return
 		var data = pipelines[pipeline_name]
 		if not component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
 			context.result.noop("Components or nodes missing/excluded")
@@ -243,6 +251,11 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS:
 		_commit_buffered_components(context, node, component_registry)
 		context._commit_node_properties()
+
+	# handle one-shot pipeline deregistration
+	if data.get("oneshot", null) and (context.result.state in data["oneshot"] or data["oneshot"].size() == 0):
+		deregister_pipeline(pipeline_class)
+		context.result.deregistered()
 
 	_run_result_handlers(pipeline_class, node, component_registry, world, context, context.result.state)
 

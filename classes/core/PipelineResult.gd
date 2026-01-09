@@ -35,3 +35,8 @@ func fail(code = 1, msg = ""):
 func cancel(msg = ""):
 	state = CANCELLED
 	error_message = msg
+
+func deregistered():
+	state = SUCCESS
+	error_code = 0
+	error_message = "deregistered"
