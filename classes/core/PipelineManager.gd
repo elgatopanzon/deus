@@ -157,7 +157,10 @@ func _commit_buffered_components(context: PipelineContext, node: Node, component
 # calls function or runs pipeline during stage execution
 func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext, component_registry: ComponentRegistry, world: Object) -> void:
 	if typeof(stage_or_pipeline) == TYPE_CALLABLE:
-		stage_or_pipeline.call(context)
+		var res = stage_or_pipeline.call(context)
+		if not null and res == false:
+			context.result.cancel("stage %s returned false" % stage_or_pipeline.get_method())
+
 	elif typeof(stage_or_pipeline) == TYPE_OBJECT and stage_or_pipeline is Script:
 		var pipeline_name = stage_or_pipeline.get_global_name()
 		var data = pipelines[pipeline_name]
