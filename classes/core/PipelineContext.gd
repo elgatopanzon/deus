@@ -13,15 +13,41 @@ extends Resource
 class NodePropertyCache:
 	var _node
 	var _cache = {}
+	var _child_node_caches = {}
 	
 	func _init(node):
 		_node = node
 	
 	func _get(property):
 		# only clone if not already cloned
-		if not _cache.has(property):
-			_cache[property] = {"value": _clone_property(property), "_dirty": false}
-		return _cache[property]["value"]
+		if property in _node:
+			if not _cache.has(property):
+				_cache[property] = {"value": _clone_property(property), "_dirty": false}
+			return _cache[property]["value"]
+		# resolve child node and create instance
+		else:
+			var child = _resolve_child_node(property)
+			if child != null:
+				return _get_child_node_cache(child)
+
+		return null
+
+	func _resolve_child_node(node_string):
+		# try name
+		var node = _node.get_node_or_null(str(node_string))
+		if node:
+			return node
+		# try type
+		for child in _node.get_children():
+			if str(child.get_class()) == node_string:
+				return child
+		return null
+
+	func _get_child_node_cache(child):
+		if not _child_node_caches.has(child):
+			_child_node_caches[child] = NodePropertyCache.new(child)
+
+		return _child_node_caches[child]
 	
 	func _set(property, value):
 		var original_value = _node.get(property)
@@ -60,12 +86,14 @@ func _init():
 
 func _get(property):
 	node_property_cache._node = _node
+
+	# root node property main priority
 	if property in _node:
 		return node_property_cache._get(property)
 	elif components.has(property):
 		return components[property]
 	else:
-		return null
+		return node_property_cache._get(property) 
 
-func commit_node_properties():
+func _commit_node_properties():
 	node_property_cache.commit()

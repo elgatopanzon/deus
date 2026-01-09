@@ -220,6 +220,6 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 			break
 	if is_root_pipeline:
 		_commit_buffered_components(context, node, component_registry)
-		context.node_property_cache.commit()
+		context._commit_node_properties()
 
 	return {"context": context, "result": context.result}
