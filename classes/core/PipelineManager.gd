@@ -137,18 +137,20 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 		return false
 	return true
 
-func _create_context_from_node(world: Object, node: Node, components: Array, component_registry: ComponentRegistry) -> PipelineContext:
-	var context := PipelineContext.new()
-	context.world = world
-	for comp in components:
-		var instance = component_registry.get_component(node, comp.get_global_name())
-		if instance != null:
-			context.components[comp.get_global_name()] = instance
-	context.payload = null
-	context.result = PipelineResult.new()
-	context.result.reset()
-	context._node = node
-	return context
+func _duplicate_component(component):
+	# duplicate the component, deep copy if possible
+	if component is Resource:
+		return component.duplicate()
+	elif component.has_method("duplicate"):
+		return component.duplicate()
+	else:
+		return component
+
+func _commit_buffered_components(context: PipelineContext, node: Node, component_registry: ComponentRegistry):
+	# at the end of the pipeline, write the components back to the component store
+	for key in context.components.keys():
+		var component = context.components[key]
+		component_registry.set_component(node, key, component)
 
 func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext, component_registry: ComponentRegistry, world: Object) -> void:
 	if typeof(stage_or_pipeline) == TYPE_CALLABLE:
@@ -156,7 +158,6 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 	elif typeof(stage_or_pipeline) == TYPE_OBJECT and stage_or_pipeline is Script:
 		var pipeline_name = stage_or_pipeline.get_global_name()
 		var requires = pipelines[pipeline_name]["requires"]
-		var optional = pipelines[pipeline_name]["optional"]
 		var exclude = pipelines[pipeline_name]["exclude"]
 		var require_nodes = pipelines[pipeline_name]["require_nodes"]
 		var exclude_nodes = pipelines[pipeline_name]["exclude_nodes"]
@@ -167,10 +168,25 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 		if sub_result.result.state != PipelineResult.SUCCESS:
 			context.result = sub_result.result
 			return
-		var add_ctx = _create_context_from_node(world, node, requires + optional, component_registry)
-		for key in add_ctx.components.keys():
-			context.components[key] = add_ctx.components[key]
+		# copy any context changes from sub pipeline directly into the parent context
+		for key in sub_result.context.components.keys():
+			context.components[key] = sub_result.context.components[key]
 
+
+func _create_context_from_node(world: Object, node: Node, components: Array, component_registry: ComponentRegistry) -> PipelineContext:
+	var context := PipelineContext.new()
+	context.world = world
+	for comp in components:
+		var instance = component_registry.get_component(node, comp.get_global_name())
+		if instance != null:
+			context.components[comp.get_global_name()] = _duplicate_component(instance)
+	context.payload = null
+	context.result = PipelineResult.new()
+	context.result.reset()
+	context._node = node
+	return context
+
+# debug: print components at start of context creation
 func run(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, payload = null, context_override = null) -> Dictionary:
 	var pipeline_name = pipeline_class.get_global_name()
 	if not pipelines.has(pipeline_name):
@@ -186,8 +202,10 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 		return {"context": null, "result": result_fail}
 	var stages = pipelines[pipeline_name]["stages"]
 	var context = context_override
+	var is_root_pipeline = false
 	if context_override == null:
 		context = _create_context_from_node(world, node, requires + optional, component_registry)
+		is_root_pipeline = true
 	context.result.reset()
 	if payload != null:
 		context.payload = payload
@@ -200,5 +218,8 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 				break
 		if context.result.state != PipelineResult.SUCCESS:
 			break
-	context.node_property_cache.commit()
+	if is_root_pipeline:
+		_commit_buffered_components(context, node, component_registry)
+		context.node_property_cache.commit()
+
 	return {"context": context, "result": context.result}
