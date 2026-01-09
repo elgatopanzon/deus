@@ -52,6 +52,14 @@ func remove_component(node: Node, component_name: String) -> void:
 		node_components[node].erase(component_name)
 		if node_components[node].size() == 0:
 			node_components.erase(node)
+			
+func remove_all_components(node: Node) -> void:
+	if node_components.has(node):
+		for component_name in node_components[node]:
+			var components = _get_sparse_set(component_name)
+			var entity_id = _ensure_entity_id(node)
+			components.erase(entity_id)
+		node_components.erase(node)
 
 func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 	if requires.size() > 0:

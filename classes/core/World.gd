@@ -12,6 +12,7 @@ extends Node
 
 var component_registry
 var pipeline_manager
+var node_registry
 
 static var instance: World
 
@@ -21,6 +22,9 @@ var delta_fixed: float
 func _init():
 	component_registry = ComponentRegistry.new()
 	pipeline_manager = PipelineManager.new()
+	node_registry = NodeRegistry.new()
+
+	add_child(node_registry)
 
 	# register world pipelines
 	register_pipeline(WorldUpdatePipeline)
@@ -30,15 +34,10 @@ func _init():
 
 
 func _enter_tree():
-	# scenetree listeners
-	get_tree().connect("node_added", _on_node_added)
 	get_tree().connect("node_removed", _on_node_removed)
 
-func _on_node_added(node: Node):
-	print("node added to scenetree: %s: %s" % [node.name, node.get_path()])
-
 func _on_node_removed(node: Node):
-	print("node removed frome scenetree: %s: %s" % [node.name, node.get_path()])
+	component_registry.remove_all_components(node)
 
 func _process(_delta):
 	delta = _delta
@@ -47,6 +46,32 @@ func _process(_delta):
 func _physics_process(_delta):
 	delta_fixed = _delta
 	execute_pipeline(WorldFixedUpdatePipeline, self)
+
+# node methods
+func _get(property):
+	# try by name
+	var node = get_node_by_name(property)
+	if node:
+		return node
+	# try by id
+	node = get_nodes_by_id(property)
+	if node:
+		return node
+
+	return null
+
+# search helper functions remain unchanged
+func get_node_by_name(_name):
+	return node_registry.get_nodes_by_name(_name)
+
+func get_nodes_by_type(_type) -> Array:
+	return node_registry.get_nodes_by_type(_type)
+
+func get_nodes_by_group(_group) -> Array:
+	return node_registry.get_nodes_by_group(_group)
+
+func get_nodes_by_id(_id) -> Array:
+	return node_registry.get_nodes_by_id(_id)
 
 # component methods
 func set_component(node: Node, comp: Script, component: Resource) -> void:

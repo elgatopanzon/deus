@@ -4,6 +4,8 @@ func _ready():
 	World.instance.inject_pipeline(ReverseDamagePipeline, DamagePipeline._stage_deduct, true)
 	World.instance.inject_pipeline_result_handler(DamagePipeline, ResultPipeline, [PipelineResult.SUCCESS])
 
+	World.instance.set_component(World.instance.RigidBody2D, Health, Health.new())
+
 	# create nodes to stress test pipelines and components
 	const N = 100
 	var nodes = []
@@ -62,3 +64,5 @@ func _ready():
 	World.instance.remove_component(World.instance, Health)
 	assert(World.instance.has_component(World.instance, Health) == false, "Singleton health removal failed")
 	print("Singleton health removal passed")
+
+	World.instance.RigidBody2D.queue_free()
