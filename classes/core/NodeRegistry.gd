@@ -17,7 +17,6 @@ signal node_renamed(node, node_name, node_name_new)
 # keeps mappings for various node attributes
 var nodes_by_name: Dictionary = {}
 var nodes_by_type: Dictionary = {}
-var nodes_by_group: Dictionary = {}
 var nodes_by_meta: Dictionary = {}
 
 # deferred signal connection request queue
@@ -42,10 +41,6 @@ func _register_node(node: Node):
 	if not nodes_by_type.has(t):
 		nodes_by_type[t] = []
 	nodes_by_type[t].append(node)
-	for group in node.get_groups():
-		if not nodes_by_group.has(group):
-			nodes_by_group[group] = []
-		nodes_by_group[group].append(node)
 	var meta_id = ""
 	if node.has_meta("id"):
 		meta_id = node.get_meta("id")
@@ -60,11 +55,6 @@ func _deregister_node(node: Node):
 		nodes_by_type[node.get_class()].erase(node)
 		if nodes_by_type[node.get_class()].is_empty():
 			nodes_by_type.erase(node.get_class())
-	for group in node.get_groups():
-		if nodes_by_group.has(group):
-			nodes_by_group[group].erase(node)
-			if nodes_by_group[group].is_empty():
-				nodes_by_group.erase(group)
 	var meta_id = ""
 	if node.has_meta("id"):
 		meta_id = node.get_meta("id")
@@ -103,7 +93,7 @@ func try_get_node(target) -> Node:
 # process deferred signal connection queue on tree_changed
 func _try_connect_signal(target, signal_name: String, callable: Callable, flags: int = 0) -> bool:
 	var possible_node = try_get_node(target)
-	if possible_node.has_signal(signal_name):
+	if possible_node and possible_node.has_signal(signal_name):
 		possible_node.connect(signal_name, callable, flags)
 		return true
 	return false
@@ -131,4 +121,4 @@ func get_nodes_by_type(type_name: String) -> Array:
 	return nodes_by_type.get(type_name, [])
 
 func get_nodes_by_group(group: String) -> Array:
-	return nodes_by_group.get(group, [])
+	return get_tree().get_nodes_in_group(group)
