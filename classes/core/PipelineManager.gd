@@ -12,6 +12,9 @@ extends Resource
 
 var pipelines = {}
 
+# dictionary to hold result handlers for pipelines
+var pipeline_result_handlers = {}
+
 func _get_pipeline_class_components(pipeline_class: Script) -> Dictionary:
 	var result = {
 		"requires": [],
@@ -34,7 +37,6 @@ func _get_pipeline_class_components(pipeline_class: Script) -> Dictionary:
 			result["exclude_nodes"] = _class_type_array_to_string_array(pipeline_class._exclude_nodes())
 	return result
 
-# helper function to convert classes/scripts/types of an array to strings
 func _class_type_array_to_string_array(arr: Array) -> Array:
 	var result = []
 	for item in arr:
@@ -50,10 +52,8 @@ func _class_type_array_to_string_array(arr: Array) -> Array:
 	return result
 
 func _type_to_string(item):
-	# todo: test this with custom types and inherited custom types
 	if typeof(item) == TYPE_OBJECT and item is Script:
 		return item.get_global_name()
-	# this should work for native classes
 	elif typeof(item) == TYPE_OBJECT:
 		return item.new().get_class()
 	else:
@@ -85,7 +85,14 @@ func register_pipeline(pipeline_class: Script) -> void:
 	}
 
 func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before: bool = false, priority: int = 0) -> void:
+	if not pipelines.has(injected_fn_or_pipeline.get_global_name()):
+		register_pipeline(injected_fn_or_pipeline)
+
+
 	var pipeline_class_name = target_callable.get_object().get_global_name()
+	if not pipelines.has(pipeline_class_name):
+		register_pipeline(target_callable.get_object())
+
 	var stage_func = pipeline_class_name + "." + target_callable.get_method()
 	if pipelines.has(pipeline_class_name):
 		if not pipelines[pipeline_class_name]["stages"].has(stage_func):
@@ -99,6 +106,8 @@ func deregister_pipeline(pipeline_class: Script) -> void:
 	var name = pipeline_class.get_global_name()
 	if pipelines.has(name):
 		pipelines.erase(name)
+	if pipeline_result_handlers.has(name):
+		pipeline_result_handlers.erase(name)
 
 func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> void:
 	var pipeline_class_name = target_callable.get_object().get_global_name()
@@ -115,19 +124,16 @@ func _matches_node_type_or_name(node: Node, sets: Array) -> bool:
 
 		for set_entry in entry:
 			if i == 0:
-				# only check the owner (node itself) for the first entry
 				if typeof(set_entry) == TYPE_STRING:
 					if node.name == set_entry or node.get_class() == set_entry:
 						matched = true
 			else:
-				# check children for items 2+
 				for child in node.get_children():
 					if typeof(set_entry) == TYPE_STRING and (child.name == set_entry or child.get_class() == set_entry):
 						matched = true
 						break
 			found.append(matched)
 
-	# all entries in types_or_names must be found
 	return found.size() > 0 and not found.has(false)
 
 func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
@@ -138,7 +144,6 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 	return true
 
 func _duplicate_component(component):
-	# duplicate the component, deep copy if possible
 	if component is Resource:
 		return component.duplicate()
 	elif component.has_method("duplicate"):
@@ -147,7 +152,6 @@ func _duplicate_component(component):
 		return component
 
 func _commit_buffered_components(context: PipelineContext, node: Node, component_registry: ComponentRegistry):
-	# at the end of the pipeline, write the components back to the component store
 	for key in context.components.keys():
 		var component = context.components[key]
 		component_registry.set_component(node, key, component)
@@ -162,16 +166,14 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 		var require_nodes = pipelines[pipeline_name]["require_nodes"]
 		var exclude_nodes = pipelines[pipeline_name]["exclude_nodes"]
 		if not component_registry.components_match(node, requires, exclude) or not _nodes_match(node, require_nodes, exclude_nodes):
-			context.result.noop()
+			context.result.noop("Components or nodes missing/excluded")
 			return
 		var sub_result = self.run(stage_or_pipeline, node, component_registry, world, context.payload, context)
 		if sub_result.result.state != PipelineResult.SUCCESS:
 			context.result = sub_result.result
 			return
-		# copy any context changes from sub pipeline directly into the parent context
 		for key in sub_result.context.components.keys():
 			context.components[key] = sub_result.context.components[key]
-
 
 func _create_context_from_node(world: Object, node: Node, components: Array, component_registry: ComponentRegistry) -> PipelineContext:
 	var context := PipelineContext.new()
@@ -186,7 +188,27 @@ func _create_context_from_node(world: Object, node: Node, components: Array, com
 	context._node = node
 	return context
 
-# debug: print components at start of context creation
+func inject_pipeline_result_handler(parent_pipeline: Script, handler_pipeline: Script, result_states: Array) -> void:
+	if not pipelines.has(parent_pipeline.get_global_name()):
+		register_pipeline(parent_pipeline)
+	if not pipelines.has(handler_pipeline.get_global_name()):
+		register_pipeline(handler_pipeline)
+
+	var parent_name = parent_pipeline.get_global_name()
+	if not pipeline_result_handlers.has(parent_name):
+		pipeline_result_handlers[parent_name] = []
+	pipeline_result_handlers[parent_name].append({
+		"handler_pipeline": handler_pipeline,
+		"result_states": result_states.duplicate()
+	})
+
+func _run_result_handlers(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, context: PipelineContext, result_state) -> void:
+	var name = pipeline_class.get_global_name()
+	if pipeline_result_handlers.has(name):
+		for handler in pipeline_result_handlers[name]:
+			if handler.result_states.has(result_state):
+				self.run(handler.handler_pipeline, node, component_registry, world, context.payload, context)
+
 func run(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, payload = null, context_override = null) -> Dictionary:
 	var pipeline_name = pipeline_class.get_global_name()
 	if not pipelines.has(pipeline_name):
@@ -198,8 +220,10 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 	var exclude_nodes = pipelines[pipeline_name]["exclude_nodes"]
 	if not component_registry.components_match(node, requires, exclude) or not _nodes_match(node, require_nodes, exclude_nodes):
 		var result_fail = PipelineResult.new()
-		result_fail.noop()
+		result_fail.noop("Components or nodes missing/excluded")
+		_run_result_handlers(pipeline_class, node, component_registry, world, null, result_fail.state)
 		return {"context": null, "result": result_fail}
+
 	var stages = pipelines[pipeline_name]["stages"]
 	var context = context_override
 	var is_root_pipeline = false
@@ -218,8 +242,10 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 				break
 		if context.result.state != PipelineResult.SUCCESS:
 			break
-	if is_root_pipeline:
+	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS:
 		_commit_buffered_components(context, node, component_registry)
 		context._commit_node_properties()
+
+	_run_result_handlers(pipeline_class, node, component_registry, world, context, context.result.state)
 
 	return {"context": context, "result": context.result}

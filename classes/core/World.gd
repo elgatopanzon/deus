@@ -71,6 +71,9 @@ func deregister_pipeline(pipeline_class: Script) -> void:
 func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before: bool = false, priority: int = 0) -> void:
 	pipeline_manager.inject_pipeline(injected_fn_or_pipeline, target_callable, before, priority)
 
+func inject_pipeline_result_handler(existing_pipeline, target_pipeline, result_states := []) -> void:
+	pipeline_manager.inject_pipeline_result_handler(existing_pipeline, target_pipeline, result_states)
+
 func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> void:
 	pipeline_manager.uninject_pipeline(injected_fn_or_pipeline, target_callable)
 

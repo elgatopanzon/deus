@@ -1,10 +1,8 @@
 extends Node2D
 
 func _ready():
-	World.instance.register_pipeline(DamagePipeline)
-	World.instance.register_pipeline(ReverseDamagePipeline)
-
 	World.instance.inject_pipeline(ReverseDamagePipeline, DamagePipeline._stage_deduct, true)
+	World.instance.inject_pipeline_result_handler(DamagePipeline, ResultPipeline, [PipelineResult.SUCCESS])
 
 	# create nodes to stress test pipelines and components
 	const N = 100

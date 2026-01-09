@@ -23,8 +23,9 @@ func reset():
 	error_code = 0
 	error_message = ""
 
-func noop():
-	state = SUCCESS
+func noop(msg = ""):
+	state = CANCELLED
+	error_message = msg
 
 func fail(code = 1, msg = ""):
 	state = FAILED
