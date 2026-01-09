@@ -54,7 +54,7 @@ func _get(property):
 	if node:
 		return node
 	# try by id
-	node = get_nodes_by_id(property)
+	node = get_node_by_id(property)
 	if node:
 		return node
 
@@ -70,8 +70,8 @@ func get_nodes_by_type(_type) -> Array:
 func get_nodes_by_group(_group) -> Array:
 	return node_registry.get_nodes_by_group(_group)
 
-func get_nodes_by_id(_id) -> Array:
-	return node_registry.get_nodes_by_id(_id)
+func get_node_by_id(_id) -> Node:
+	return node_registry.get_node_by_id(_id)
 
 # component methods
 func set_component(node: Node, comp: Script, component: Resource) -> void:

@@ -7,7 +7,7 @@
 # @description : default world fixed update pipeline
 ######################################################################
 
-class_name WorldFixedUpdatePipeline
+class_name WorldFixedUpdatePipeline extends Pipeline
 
 static func _stage_pre_fixed_update(ctx):
 	pass

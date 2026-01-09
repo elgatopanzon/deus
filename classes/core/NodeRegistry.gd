@@ -92,11 +92,11 @@ func _on_node_renamed(node: Node, old_name: String):
 func get_nodes_by_name(_name: String) -> Node:
 	return nodes_by_name.get(_name, null)
 
+func get_node_by_id(meta_id) -> Node:
+	return nodes_by_meta.get(meta_id, null)
+
 func get_nodes_by_type(type_name: String) -> Array:
 	return nodes_by_type.get(type_name, [])
 
 func get_nodes_by_group(group: String) -> Array:
 	return nodes_by_group.get(group, [])
-
-func get_nodes_by_meta(meta_id) -> Array:
-	return nodes_by_meta.get(meta_id, null)

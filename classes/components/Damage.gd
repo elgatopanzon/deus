@@ -1,3 +1,2 @@
-# damage component as a resource
-class_name Damage extends Resource
+class_name Damage extends Component
 @export var value: int = 0

@@ -2,6 +2,37 @@
 
 [ext_resource type="Script" uid="uid://dlqd8hf0kf75i" path="res://scenes/Tests.gd" id="1_vko8c"]
 [ext_resource type="Texture2D" uid="uid://dwx8e1op52kip" path="res://icon.svg" id="2_b63rd"]
+[ext_resource type="Script" uid="uid://d038usdvtw50r" path="res://classes/core/EntityConfiguration.gd" id="3_uj06v"]
+[ext_resource type="Script" uid="uid://bd6r8wnj5xa08" path="res://classes/core/EntityConfig.gd" id="4_crlaw"]
+[ext_resource type="Script" uid="uid://d2eap8f4cn4po" path="res://classes/core/ComponentConfig.gd" id="4_jnhux"]
+[ext_resource type="Script" uid="uid://d2eivmppis3sb" path="res://classes/components/Damage.gd" id="6_fbvdb"]
+[ext_resource type="Script" uid="uid://dpa7ha82ubr77" path="res://classes/core/SignalToPipelineConfig.gd" id="8_68fm8"]
+[ext_resource type="Script" uid="uid://djisnll356l4d" path="res://classes/pipelines/ButtonPressedPipeline.gd" id="9_saue4"]
+
+[sub_resource type="Resource" id="Resource_68fm8"]
+script = ExtResource("4_crlaw")
+metadata/_custom_type_script = "uid://bd6r8wnj5xa08"
+
+[sub_resource type="Resource" id="Resource_saue4"]
+script = ExtResource("6_fbvdb")
+value = 456
+metadata/_custom_type_script = "uid://d2eivmppis3sb"
+
+[sub_resource type="Resource" id="Resource_4vpgq"]
+script = ExtResource("4_jnhux")
+component = SubResource("Resource_saue4")
+metadata/_custom_type_script = "uid://d2eap8f4cn4po"
+
+[sub_resource type="Resource" id="Resource_hq3m6"]
+script = ExtResource("9_saue4")
+metadata/_custom_type_script = "uid://djisnll356l4d"
+
+[sub_resource type="Resource" id="Resource_ywxwr"]
+script = ExtResource("8_68fm8")
+signal_name = "pressed"
+pipeline = SubResource("Resource_hq3m6")
+execution_node_id = "custom_button"
+metadata/_custom_type_script = "uid://dpa7ha82ubr77"
 
 [node name="Tests" type="Node2D" unique_id=1561858668]
 script = ExtResource("1_vko8c")
@@ -16,3 +47,11 @@ texture = ExtResource("2_b63rd")
 offset_right = 8.0
 offset_bottom = 8.0
 text = "Button"
+
+[node name="EntityConfiguration" type="Node" parent="Button" unique_id=2086039020]
+script = ExtResource("3_uj06v")
+node_id = "custom_button"
+entity_config = SubResource("Resource_68fm8")
+components = Array[ExtResource("4_jnhux")]([SubResource("Resource_4vpgq")])
+signals_to_pipelines = Array[ExtResource("8_68fm8")]([SubResource("Resource_ywxwr")])
+metadata/_custom_type_script = "uid://d038usdvtw50r"
