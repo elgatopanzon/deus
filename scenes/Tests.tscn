@@ -11,3 +11,8 @@ script = ExtResource("1_vko8c")
 [node name="Sprite2D" type="Sprite2D" parent="RigidBody2D" unique_id=1948133713]
 position = Vector2(504, 301)
 texture = ExtResource("2_b63rd")
+
+[node name="Button" type="Button" parent="." unique_id=323840812]
+offset_right = 8.0
+offset_bottom = 8.0
+text = "Button"

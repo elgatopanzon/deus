@@ -64,6 +64,9 @@ func _type_to_string(item):
 # registers the pipeline and its stage methods
 func register_pipeline(pipeline_class: Script) -> void:
 	var name = pipeline_class.get_global_name()
+	if pipelines.has(name):
+		return
+
 	var stages = {}
 
 	if pipeline_class.has_method("_stages"):

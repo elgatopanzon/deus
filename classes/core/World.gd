@@ -34,9 +34,9 @@ func _init():
 
 
 func _enter_tree():
-	get_tree().connect("node_removed", _on_node_removed)
+	node_registry.connect("node_deregistered", _on_node_removed)
 
-func _on_node_removed(node: Node):
+func _on_node_removed(node: Node, _node_name: String, _node_id: String):
 	component_registry.remove_all_components(node)
 
 func _process(_delta):
@@ -124,3 +124,15 @@ func execute_global_pipeline(pipeline_class: Script, payload = null, context_ove
 		var ret = pipeline_manager.run(pipeline_class, node, component_registry, self, payload, context_override)
 		node_results[node] = ret.result
 	return node_results
+
+func signal_to_pipeline(connect_node: Object, signal_name: String, target_node: Object, pipeline_class: Script, flags: int = 0) -> void:
+	register_pipeline(pipeline_class)
+	connect_node.connect(signal_name, Callable(func(...args):
+		execute_pipeline(pipeline_class, target_node, [connect_node] + args)
+	), flags)
+
+func signal_to_global_pipeline(connect_node: Object, signal_name: String, pipeline_class: Script, flags: int = 0) -> void:
+	register_pipeline(pipeline_class)
+	connect_node.connect(signal_name, Callable(func(...args):
+		execute_global_pipeline(pipeline_class, args)
+	), flags)
