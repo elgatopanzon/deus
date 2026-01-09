@@ -147,6 +147,7 @@ func _create_context_from_node(world: Object, node: Node, components: Array, com
 	context.payload = null
 	context.result = PipelineResult.new()
 	context.result.reset()
+	context._node = node
 	return context
 
 func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext, component_registry: ComponentRegistry, world: Object) -> void:
@@ -199,4 +200,5 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 				break
 		if context.result.state != PipelineResult.SUCCESS:
 			break
+	context.node_property_cache.commit()
 	return {"context": context, "result": context.result}
