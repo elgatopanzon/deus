@@ -12,6 +12,7 @@ extends Node
 
 var component_registry
 var pipeline_manager
+var pipeline_scheduler
 var node_registry
 var resource_registry
 
@@ -31,11 +32,11 @@ func _init():
 	node_registry = NodeRegistry.new()
 	resource_registry = ResourceRegistry.new()
 
-	add_child(node_registry)
+	# scheduler
+	pipeline_scheduler = PipelineScheduler.new(self)
+	PipelineSchedulerDefaults.init_default_environment(pipeline_scheduler)
 
-	# register world pipelines
-	register_pipeline(WorldUpdatePipeline)
-	register_pipeline(WorldFixedUpdatePipeline)
+	add_child(node_registry)
 
 	instance = self
 
@@ -49,11 +50,13 @@ func _on_node_removed(node: Node, _node_name: String, _node_id: String):
 
 func _process(_delta):
 	delta = _delta
-	execute_pipeline(WorldUpdatePipeline, self)
+
+	pipeline_scheduler.run_tasks(PipelineSchedulerDefaults.DefaultPhase, _delta)
 
 func _physics_process(_delta):
 	delta_fixed = _delta
-	execute_pipeline(WorldFixedUpdatePipeline, self)
+
+	pipeline_scheduler.run_tasks(PipelineSchedulerDefaults.DefaultFixedPhase, _delta)
 
 # node methods
 func _get(property):
