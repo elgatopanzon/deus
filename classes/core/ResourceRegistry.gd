@@ -10,6 +10,9 @@
 class_name ResourceRegistry
 extends Node
 
+signal resource_registered(node, resource_id, resource)
+signal resource_deregistered(node, resource_id, resource)
+
 # this dictionary holds resources for each node, mapped by a string id
 var _resources := {}
 
@@ -18,6 +21,8 @@ func register_resource(node: Node, resource: Resource, resource_id: String) -> v
 	if not _resources.has(node):
 		_resources[node] = {}
 	_resources[node][resource_id] = resource
+
+	resource_registered.emit(node, resource_id, resource)
 
 # gets a registered resource by node and id, returns null if not found
 func get_resource(node: Node, resource_id: String) -> Resource:
@@ -28,6 +33,9 @@ func get_resource(node: Node, resource_id: String) -> Resource:
 # removes a resource
 func unregister_resource(node: Node, resource_id: String) -> void:
 	if _resources.has(node):
+		if _resources[node].has(resource_id):
+			resource_deregistered.emit(node, resource_id, _resources[node][resource_id])
+
 		_resources[node].erase(resource_id)
 		if _resources[node].is_empty():
 			_resources.erase(node)

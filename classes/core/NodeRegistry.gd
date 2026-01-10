@@ -13,6 +13,9 @@ extends Node
 signal node_registered(node, node_name, meta_id)
 signal node_deregistered(node, node_name, meta_id)
 signal node_renamed(node, node_name, node_name_new)
+signal node_id_set(node, meta_id)
+signal node_signal_connected(node, target, signal_name, callable, flags)
+signal node_signal_connection_request(node, target, signal_name, callable, flags)
 
 # keeps mappings for various node attributes
 var nodes_by_name: Dictionary = {}
@@ -66,6 +69,8 @@ func set_node_id(node: Node, id: String):
 	node.set_meta("id", id)
 	nodes_by_meta[id] = node
 
+	node_id_set.emit(node, id)
+
 func _on_node_added(node: Node):
 	_register_node(node)
 
@@ -76,6 +81,7 @@ func _on_node_renamed(node: Node, old_name: String):
 	if nodes_by_name.has(old_name) and nodes_by_name[old_name] == node:
 		nodes_by_name.erase(old_name)
 	nodes_by_name[node.name] = node
+
 	node_renamed.emit(node, node.name, old_name)
 
 # helper for deferred
@@ -93,12 +99,13 @@ func try_get_node(target) -> Node:
 # process deferred signal connection queue on tree_changed
 func _try_connect_signal(target, signal_name: String, callable: Callable, flags: int = 0) -> bool:
 	var connected := false
-	var possible_node = try_get_node(target)
+	var found_node = try_get_node(target)
 
 	# if direct node found, try to connect
-	if possible_node and possible_node.has_signal(signal_name):
-		if not possible_node.is_connected(signal_name, callable):
-			possible_node.connect(signal_name, callable, flags)
+	if found_node and found_node.has_signal(signal_name):
+		if not found_node.is_connected(signal_name, callable):
+			found_node.connect(signal_name, callable, flags)
+			node_signal_connected.emit(found_node, target, signal_name, callable, flags)
 		return true
 
 	# try by type or group
@@ -108,6 +115,8 @@ func _try_connect_signal(target, signal_name: String, callable: Callable, flags:
 		for node in nodes:
 			if node.has_signal(signal_name) and not node.is_connected(signal_name, callable):
 				node.connect(signal_name, callable, flags)
+
+				node_signal_connected.emit(node, target, signal_name, callable, flags)
 
 	return connected
 
@@ -121,6 +130,9 @@ func _on_tree_changed():
 # user API for deferred signal connection
 func connect_signal_deferred(target, signal_name: String, callable: Callable, flags: int):
 	var request = {"target": target, "signal": signal_name, "callable": callable, "flags": flags}
+
+	node_signal_connection_request.emit(target, signal_name, callable, flags)
+
 	if not _try_connect_signal(target, signal_name, callable, flags):
 		deferred_signal_queue.append(request)
 

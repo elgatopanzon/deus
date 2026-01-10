@@ -10,6 +10,14 @@
 class_name PipelineManager
 extends Resource
 
+signal pipeline_registered(pipeline_class, pipeline)
+signal pipeline_deregistered(pipeline_class)
+signal pipeline_injected(pipeline_class, injected_class, injected_stage)
+signal pipeline_result_handler_injected(pipeline_class, injected_class, result_states)
+signal pipeline_uninjected(pipeline_class, injected_class, injected_stage)
+signal pipeline_executing(pipeline_class, target, payload)
+signal pipeline_executed(pipeline_class, target, payload)
+
 var pipelines = {}
 
 # dictionary to hold result handlers for pipelines
@@ -89,6 +97,8 @@ func register_pipeline(pipeline_class: Script) -> void:
 		"exclude_nodes": components["exclude_nodes"].duplicate(),
 	}
 
+	pipeline_registered.emit(pipeline_class, pipelines[name])
+
 # injects a function or pipeline before/after a target stage
 func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before: bool = false, priority: int = 0) -> void:
 	for script in [injected_fn_or_pipeline.get_global_name(), target_callable.get_object().get_global_name()]:
@@ -105,11 +115,16 @@ func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before:
 		else:
 			pipelines[pipeline_class_name]["stages"][stage_func].append(injected_fn_or_pipeline)
 
+		pipeline_injected.emit(injected_fn_or_pipeline, target_callable.get_object(), target_callable)
+
 # remove a pipeline and its result handlers from the registry
 func deregister_pipeline(pipeline_class: Script) -> void:
 	var name = pipeline_class.get_global_name()
-	pipelines.erase(name)
-	pipeline_result_handlers.erase(name)
+	if pipelines.has(name):
+		pipelines.erase(name)
+		pipeline_result_handlers.erase(name)
+
+		pipeline_deregistered.emit(pipeline_class)
 
 # removes an injected pipeline/function from a stage
 func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> void:
@@ -117,6 +132,8 @@ func uninject_pipeline(injected_fn_or_pipeline, target_callable: Callable) -> vo
 	var stage_func = pipeline_class_name + "." + target_callable.get_method()
 	if pipelines.has(pipeline_class_name):
 		pipelines[pipeline_class_name]["stages"].get(stage_func, []).erase(injected_fn_or_pipeline)
+
+		pipeline_uninjected.emit(injected_fn_or_pipeline, target_callable.get_object(), target_callable)
 
 # enable one-shot mode on a pipeline to deregister it after running once
 func set_pipeline_as_oneshot(pipeline_class: Script, deregister_on_results: Array[String]) -> void:
@@ -212,6 +229,8 @@ func inject_pipeline_result_handler(parent_pipeline: Script, handler_pipeline: S
 		"result_states": result_states.duplicate()
 	})
 
+	pipeline_result_handler_injected.emit(parent_pipeline, handler_pipeline, result_states)
+
 # run all result handler pipelines associated with a given result state
 func _run_result_handlers(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, context: PipelineContext, result_state) -> void:
 	var name = pipeline_class.get_global_name()
@@ -231,6 +250,8 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 		result_fail.noop("Components or nodes missing/excluded")
 		_run_result_handlers(pipeline_class, node, component_registry, world, null, result_fail.state)
 		return {"context": null, "result": result_fail}
+
+	pipeline_executing.emit(pipeline_class, node, payload)
 
 	var context = context_override
 	var is_root_pipeline = false
@@ -261,5 +282,7 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 		context.result.deregistered()
 
 	_run_result_handlers(pipeline_class, node, component_registry, world, context, context.result.state)
+
+	pipeline_executed.emit(pipeline_class, node, payload, context.result)
 
 	return {"context": context, "result": context.result}

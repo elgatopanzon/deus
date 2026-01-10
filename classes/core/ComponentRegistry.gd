@@ -10,6 +10,10 @@
 class_name ComponentRegistry
 extends Resource
 
+signal component_added(node, entity_id, component_name, component)
+signal component_removed(node, entity_id, component_name)
+signal component_removed_all(node, entity_id, component_name)
+
 var component_sets = {}
 var next_entity_id: int = 0
 var node_components = {} # keeps track of nodes and their components (by name)
@@ -27,12 +31,15 @@ func _get_sparse_set(component_name: String) -> SparseSet:
 
 func set_component(node: Node, component_name: String, component: Resource) -> void:
 	var entity_id = _ensure_entity_id(node)
-	var components = _get_sparse_set(component_name)
-	components.add(entity_id, component)
 	if not node_components.has(node):
 		node_components[node] = []
 	if component_name not in node_components[node]:
 		node_components[node].append(component_name)
+
+		component_added.emit(node, entity_id, component_name, component)
+
+	var components = _get_sparse_set(component_name)
+	components.add(entity_id, component)
 
 func get_component(node: Node, component_name: String) -> Resource:
 	var entity_id = _ensure_entity_id(node)
@@ -48,10 +55,14 @@ func remove_component(node: Node, component_name: String) -> void:
 	var entity_id = _ensure_entity_id(node)
 	var components = _get_sparse_set(component_name)
 	components.erase(entity_id)
+	component_removed.emit(node, entity_id, component_name)
+
 	if node_components.has(node):
 		node_components[node].erase(component_name)
 		if node_components[node].size() == 0:
 			node_components.erase(node)
+			component_removed_all.emit(node, entity_id, component_name)
+
 			
 func remove_all_components(node: Node) -> void:
 	if node_components.has(node):
