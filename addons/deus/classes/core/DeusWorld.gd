@@ -21,6 +21,8 @@ static var instance: DeusWorld
 var delta: float
 var delta_fixed: float
 
+var startup_executed := false
+
 func _init():
 	DeusConfig.init_project_config()
 
@@ -50,6 +52,10 @@ func _on_node_removed(node: Node, _node_name: String, _node_id: String):
 
 func _process(_delta):
 	delta = _delta
+
+	if not startup_executed:
+		pipeline_scheduler.run_tasks(PipelineSchedulerDefaults.StartupPhase, _delta)
+		startup_executed = true
 
 	pipeline_scheduler.run_tasks(PipelineSchedulerDefaults.DefaultPhase, _delta)
 
