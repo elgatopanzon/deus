@@ -13,5 +13,7 @@ extends EditorPlugin
 func _enter_tree():
 	add_autoload_singleton("Deus", "res://addons/deus/classes/core/DeusWorld.gd")
 
+	DeusConfig.init_project_config()
+
 func _exit_tree():
 	remove_autoload_singleton("Deus")

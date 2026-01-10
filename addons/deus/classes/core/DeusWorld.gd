@@ -21,6 +21,8 @@ var delta: float
 var delta_fixed: float
 
 func _init():
+	DeusConfig.init_project_config()
+
 	component_registry = ComponentRegistry.new()
 	pipeline_manager = PipelineManager.new()
 	node_registry = NodeRegistry.new()
@@ -74,10 +76,10 @@ func set_node_id(node: Node, id: String):
 	node_registry.set_node_id(node, id)
 
 # component methods
-func set_component(node: Node, comp: Script, component: Resource) -> void:
+func set_component(node: Node, comp: Script, component: DefaultComponent) -> void:
 	component_registry.set_component(node, comp.get_global_name(), component)
 
-func get_component(node: Node, component_class: Script) -> Resource:
+func get_component(node: Node, component_class: Script) -> DefaultComponent:
 	return component_registry.get_component(node, component_class.get_global_name())
 
 func has_component(node: Node, component_class: Script) -> bool:

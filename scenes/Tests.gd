@@ -68,3 +68,25 @@ func _ready():
 	Deus.RigidBody2D.queue_free()
 
 	print(Deus.get_resource(Deus.Button, "test_resource"))
+
+	print(ProjectSettings.get_setting("addons/deus/components/enable_component_lifecycle_pipelines"))
+
+	Deus.component_registry.connect("component_added", func(...args): print("component_added: "); print(args))
+	Deus.component_registry.connect("component_set", func(...args): print("component_set: "); print("new:%s" % [args[3].value]))
+	Deus.component_registry.connect("component_removed", func(...args): print("component_removed: "); print(args))
+
+	var he = Health.new()
+
+	# should trigger change
+	he.value = 321
+	Deus.set_component(Deus.Button, Health, he)
+
+	# should trigger change
+	he = Deus.get_component(Deus.Button, Health)
+	he.value = 456
+	Deus.set_component(Deus.Button, Health, he)
+
+	# should not trigger change
+	he = Deus.get_component(Deus.Button, Health)
+	he.value = 456
+	Deus.set_component(Deus.Button, Health, he)

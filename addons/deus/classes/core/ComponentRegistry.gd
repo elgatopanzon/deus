@@ -11,6 +11,7 @@ class_name ComponentRegistry
 extends Resource
 
 signal component_added(node, entity_id, component_name, component)
+signal component_set(node, entity_id, component_name, component)
 signal component_removed(node, entity_id, component_name)
 signal component_removed_all(node, entity_id, component_name)
 
@@ -29,22 +30,47 @@ func _get_sparse_set(component_name: String) -> SparseSet:
 		component_sets[component_name] = SparseSet.new()
 	return component_sets[component_name]
 
-func set_component(node: Node, component_name: String, component: Resource) -> void:
+func set_component(node: Node, component_name: String, component: DefaultComponent) -> void:
 	var entity_id = _ensure_entity_id(node)
 	if not node_components.has(node):
 		node_components[node] = []
 	if component_name not in node_components[node]:
 		node_components[node].append(component_name)
-
 		component_added.emit(node, entity_id, component_name, component)
-
+	else:
+		var components = _get_sparse_set(component_name)
+		var existing_component = components.get_value(entity_id)
+		if not _deep_compare_component(existing_component, component):
+			component_set.emit(node, entity_id, component_name, component)
 	var components = _get_sparse_set(component_name)
 	components.add(entity_id, component)
 
-func get_component(node: Node, component_name: String) -> Resource:
+# does a deep comparison of each property
+func _deep_compare_component(a: Resource, b: Resource) -> bool:
+	if a == null or b == null:
+		return a == b
+	if a == b:
+		return true
+	for property in a.get_property_list():
+		if not property.has("name"):
+			continue
+		var name = property.name
+		if not b.has_method("get") or not a.has_method("get"):
+			continue
+		var a_val = a.get(name)
+		var b_val = b.get(name)
+		if a_val is Resource and b_val is Resource:
+			if not _deep_compare_component(a_val, b_val):
+				return false
+		else:
+			if not is_same(a_val, b_val):
+				return false
+	return true
+
+func get_component(node: Node, component_name: String) -> DefaultComponent:
 	var entity_id = _ensure_entity_id(node)
 	var components = _get_sparse_set(component_name)
-	return components.get_value(entity_id)
+	return components.get_value(entity_id).duplicate(true)
 
 func has_component(node: Node, component_name: String) -> bool:
 	var entity_id = _ensure_entity_id(node)
