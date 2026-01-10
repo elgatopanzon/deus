@@ -11,7 +11,7 @@ class_name SignalToPipelineConfig
 extends Resource
 
 @export var signal_name: String
-@export var pipeline: Pipeline
+@export var pipeline: DefaultPipeline
 @export var execution_node_path: NodePath
 @export var execution_node_id: String
 @export var execute_global: bool = false

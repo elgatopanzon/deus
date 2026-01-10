@@ -1,13 +1,13 @@
 ######################################################################
 # @author      : ElGatoPanzon
-# @class       : World
+# @class       : DeusWorld
 # @created     : Wednesday Jan 07, 2026 13:02:21 CST
 # @copyright   : Copyright (c) ElGatoPanzon 2026
 #
-# @description : main World object holding pipelines and components
+# @description : main DeusWorld object holding pipelines and components
 ######################################################################
 
-class_name World
+class_name DeusWorld
 extends Node
 
 var component_registry
@@ -15,7 +15,7 @@ var pipeline_manager
 var node_registry
 var resource_registry
 
-static var instance: World
+static var instance: DeusWorld
 
 var delta: float
 var delta_fixed: float
@@ -143,8 +143,8 @@ func signal_to_pipeline(connect_node, signal_name: String, target_node, pipeline
 
 	node_registry.connect_signal_deferred(connect_node, signal_name,
 		Callable(func(...args):
-			var target_ = World.instance.try_get_node(target_node)
-			var connect_ = World.instance.try_get_node(connect_node)
+			var target_ = DeusWorld.instance.try_get_node(target_node)
+			var connect_ = DeusWorld.instance.try_get_node(connect_node)
 			if target_ and connect_:
 				execute_pipeline(pipeline_class, target_, [connect_] + args)
 				)
@@ -155,7 +155,7 @@ func signal_to_global_pipeline(connect_node, signal_name: String, pipeline_class
 
 	node_registry.connect_signal_deferred(connect_node, "", signal_name,
 		Callable(func(...args):
-			var connect_ = World.instance.try_get_node(connect_node)
+			var connect_ = DeusWorld.instance.try_get_node(connect_node)
 			if connect_:
 				execute_global_pipeline(pipeline_class, [connect_] + args)
 				)

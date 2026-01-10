@@ -1,13 +1,13 @@
 ######################################################################
 # @author      : ElGatoPanzon
-# @class       : EntityConfiguration
+# @class       : DeusConfiguration
 # @created     : Thursday Jan 08, 2026 22:48:11 CST
 # @copyright   : Copyright (c) ElGatoPanzon 2026
 #
 # @description : entity configuration Node
 ######################################################################
 
-class_name EntityConfiguration
+class_name DeusConfiguration
 extends Node
 
 # export node id as a string
@@ -29,7 +29,7 @@ func _enter_tree():
 	var parent = get_parent()
 
 	if node_id.length() > 0:
-		World.instance.set_node_id(parent, node_id)
+		DeusWorld.instance.set_node_id(parent, node_id)
 
 	_init_components()
 	_init_resources()
@@ -45,7 +45,7 @@ func _init_components():
 		if comp.duplicate_component:
 			comp_value = comp.component.duplicate(comp.duplicate_component_deep)
 
-		World.instance.set_component(parent, comp.component.get_script(), comp_value)
+		DeusWorld.instance.set_component(parent, comp.component.get_script(), comp_value)
 
 func _init_resources():
 	var parent = get_parent()
@@ -56,7 +56,7 @@ func _init_resources():
 			if res.duplicate_resource:
 				res_value = res.resource.duplicate(res.duplicate_resource_deep)
 
-			World.instance.register_resource(parent, res.resource, res.resource_id)
+			DeusWorld.instance.register_resource(parent, res.resource, res.resource_id)
 
 
 
@@ -67,13 +67,13 @@ func _init_signals_to_pipelines():
 		var connect_node = parent
 
 		if sig.execute_global:
-			World.instance.signal_to_global_pipeline(connect_node, sig.signal_name, sig.pipeline.get_script())
+			DeusWorld.instance.signal_to_global_pipeline(connect_node, sig.signal_name, sig.pipeline.get_script())
 			return
 
-		var target_node = World.instance
+		var target_node = DeusWorld.instance
 		if sig.execution_node_path:
 			target_node = parent.get_node(sig.execution_node_path)
 		elif sig.execution_node_id.length() > 0:
 			target_node = sig.execution_node_id
 
-		World.instance.signal_to_pipeline(connect_node, sig.signal_name, target_node, sig.pipeline.get_script())
+		DeusWorld.instance.signal_to_pipeline(connect_node, sig.signal_name, target_node, sig.pipeline.get_script())

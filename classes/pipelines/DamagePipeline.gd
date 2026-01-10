@@ -1,5 +1,5 @@
 # damage pipeline class
-class_name DamagePipeline extends Pipeline
+class_name DamagePipeline extends DefaultPipeline
 static func _requires(): return [Health, Damage]
 static func _require_nodes(): return [[StaticBody2D], ["Area"]]
 static func _stage_deduct(context):

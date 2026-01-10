@@ -10,6 +10,6 @@
 class_name ComponentConfig
 extends Resource
 
-@export var component: Component
+@export var component: DefaultComponent
 @export var duplicate_component: bool = true
 @export var duplicate_component_deep: bool = false

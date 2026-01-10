@@ -7,7 +7,7 @@
 # @description : default world update pipeline
 ######################################################################
 
-class_name WorldUpdatePipeline extends Pipeline
+class_name WorldUpdatePipeline extends DefaultPipeline
 
 static func _stage_pre_update(ctx):
 	pass

@@ -1,11 +1,11 @@
 ######################################################################
 # @author      : ElGatoPanzon
-# @class       : Pipeline
-# @created     : Thursday Jan 08, 2026 23:18:18 CST
+# @class       : Component
+# @created     : Thursday Jan 08, 2026 22:46:17 CST
 # @copyright   : Copyright (c) ElGatoPanzon 2026
 #
-# @description : base Pipeline resource
+# @description : base component class
 ######################################################################
 
-class_name Pipeline
+class_name DefaultComponent
 extends Resource
