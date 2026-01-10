@@ -23,6 +23,11 @@ var pipelines = {}
 # dictionary to hold result handlers for pipelines
 var pipeline_result_handlers = {}
 
+var _world: DeusWorld
+
+func _init(world: DeusWorld):
+	_world = world
+
 # retrieves pipeline components and their types
 func _get_pipeline_class_components(pipeline_class: Script) -> Dictionary:
 	var result = {
@@ -167,12 +172,12 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 	return true
 
 # applies buffered components to a node via registry
-func _commit_buffered_components(context: PipelineContext, node: Node, component_registry: ComponentRegistry, world: DeusWorld):
+func _commit_buffered_components(context: PipelineContext, node: Node):
 	for key in context.components.keys():
-		run(SetComponentPipeline, node, component_registry, world, {"component_name": key, "component": context.components[key]})
+		run(SetComponentPipeline, node, {"component_name": key, "component": context.components[key]})
 
 # calls function or runs pipeline during stage execution
-func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext, component_registry: ComponentRegistry, world: Object) -> void:
+func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext) -> void:
 	if typeof(stage_or_pipeline) == TYPE_CALLABLE:
 		var res = stage_or_pipeline.call(context)
 		if not null and res == false:
@@ -183,10 +188,10 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 		if not pipelines.has(pipeline_name):
 			return
 		var data = pipelines[pipeline_name]
-		if not component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
+		if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
 			context.result.noop("Components or nodes missing/excluded")
 			return
-		var sub_result = self.run(stage_or_pipeline, node, component_registry, world, context.payload, context)
+		var sub_result = self.run(stage_or_pipeline, node, context.payload, context)
 		if sub_result.result.state != PipelineResult.SUCCESS:
 			context.result = sub_result.result
 			return
@@ -194,11 +199,11 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 			context.components[key] = sub_result.context.components[key]
 
 # creates processing context for a node and its components
-func _create_context_from_node(world: Object, node: Node, components: Array, component_registry: ComponentRegistry) -> PipelineContext:
+func _create_context_from_node(node: Node, components: Array) -> PipelineContext:
 	var context := PipelineContext.new()
-	context.world = world
+	context.world = _world
 	for comp in components:
-		var res = run(GetComponentPipeline, node, component_registry, world, {"component_name": comp.get_global_name()})
+		var res = run(GetComponentPipeline, node, {"component_name": comp.get_global_name()})
 		if res.result.value != null:
 			context.components[comp.get_global_name()] = res.result.value
 	context.payload = null
@@ -223,23 +228,23 @@ func inject_pipeline_result_handler(parent_pipeline: Script, handler_pipeline: S
 	pipeline_result_handler_injected.emit(parent_pipeline, handler_pipeline, result_states)
 
 # run all result handler pipelines associated with a given result state
-func _run_result_handlers(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, context: PipelineContext, result_state) -> void:
+func _run_result_handlers(pipeline_class: Script, node: Node, context: PipelineContext, result_state) -> void:
 	var name = pipeline_class.get_global_name()
 	if pipeline_result_handlers.has(name):
 		for handler in pipeline_result_handlers[name]:
 			if handler.result_states.has(result_state):
-				self.run(handler.handler_pipeline, node, component_registry, world, context.payload, context)
+				self.run(handler.handler_pipeline, node, context.payload, context)
 
 # main pipeline run logic
-func run(pipeline_class: Script, node: Node, component_registry: ComponentRegistry, world: Object, payload = null, context_override = null) -> Dictionary:
+func run(pipeline_class: Script, node: Node, payload = null, context_override = null) -> Dictionary:
 	var pipeline_name = pipeline_class.get_global_name()
 	if not pipelines.has(pipeline_name):
 		return {"context": null, "result": PipelineResult.new()}
 	var data = pipelines[pipeline_name]
-	if not component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
+	if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
 		var result_fail = PipelineResult.new()
 		result_fail.noop("Components or nodes missing/excluded")
-		_run_result_handlers(pipeline_class, node, component_registry, world, null, result_fail.state)
+		_run_result_handlers(pipeline_class, node, null, result_fail.state)
 		return {"context": null, "result": result_fail}
 
 	pipeline_executing.emit(pipeline_class, node, payload)
@@ -247,7 +252,7 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 	var context = context_override
 	var is_root_pipeline = false
 	if context_override == null:
-		context = _create_context_from_node(world, node, data["requires"] + data["optional"], component_registry)
+		context = _create_context_from_node(node, data["requires"] + data["optional"])
 		is_root_pipeline = true
 	context.result.reset()
 	if payload != null:
@@ -257,14 +262,14 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 		if context.result.state != PipelineResult.SUCCESS:
 			break
 		for fn_or_pipe in data["stages"][stage]:
-			_call_stage_or_pipeline(fn_or_pipe, node, context, component_registry, world)
+			_call_stage_or_pipeline(fn_or_pipe, node, context)
 			if context.result.state != PipelineResult.SUCCESS:
 				break
 		if context.result.state != PipelineResult.SUCCESS:
 			break
 
 	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS:
-		_commit_buffered_components(context, node, component_registry, world)
+		_commit_buffered_components(context, node)
 		context._commit_node_properties()
 
 	# handle one-shot pipeline deregistration
@@ -272,7 +277,7 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 		deregister_pipeline(pipeline_class)
 		context.result.deregistered()
 
-	_run_result_handlers(pipeline_class, node, component_registry, world, context, context.result.state)
+	_run_result_handlers(pipeline_class, node, context, context.result.state)
 
 	pipeline_executed.emit(pipeline_class, node, payload, context.result)
 

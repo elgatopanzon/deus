@@ -24,7 +24,7 @@ func _init():
 	DeusConfig.init_project_config()
 
 	component_registry = ComponentRegistry.new()
-	pipeline_manager = PipelineManager.new()
+	pipeline_manager = PipelineManager.new(self)
 	node_registry = NodeRegistry.new()
 	resource_registry = ResourceRegistry.new()
 
@@ -132,7 +132,7 @@ func pipeline_set_oneshot(pipeline_class: Script, deregister_on_results: Array[S
 	pipeline_manager.set_pipeline_as_oneshot(pipeline_class, deregister_on_results)
 
 func execute_pipeline(pipeline_class: Script, node: Node, payload = null, context_override = null) -> Dictionary:
-	return pipeline_manager.run(pipeline_class, node, component_registry, self, payload, context_override)
+	return pipeline_manager.run(pipeline_class, node, payload, context_override)
 
 func execute_global_pipeline(pipeline_class: Script, payload = null, context_override = null) -> Dictionary:
 	var pipeline_info = pipeline_manager.pipelines.get(pipeline_class.get_global_name())
@@ -143,7 +143,7 @@ func execute_global_pipeline(pipeline_class: Script, payload = null, context_ove
 	var nodes = component_registry.get_matching_nodes(requires, exclude)
 	var node_results = {}
 	for node in nodes:
-		var ret = pipeline_manager.run(pipeline_class, node, component_registry, self, payload, context_override)
+		var ret = pipeline_manager.run(pipeline_class, node, payload, context_override)
 		node_results[node] = ret.result
 	return node_results
 
