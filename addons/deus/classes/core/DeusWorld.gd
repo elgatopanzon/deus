@@ -16,8 +16,6 @@ var pipeline_scheduler
 var node_registry
 var resource_registry
 
-static var instance: DeusWorld
-
 var delta: float
 var delta_fixed: float
 
@@ -39,8 +37,6 @@ func _init():
 	PipelineSchedulerDefaults.init_default_environment(pipeline_scheduler)
 
 	add_child(node_registry)
-
-	instance = self
 
 
 func _enter_tree():
@@ -158,8 +154,8 @@ func signal_to_pipeline(connect_node, signal_name: String, target_node, pipeline
 
 	node_registry.connect_signal_deferred(connect_node, signal_name,
 		Callable(func(...args):
-			var target_ = DeusWorld.instance.try_get_node(target_node)
-			var connect_ = DeusWorld.instance.try_get_node(connect_node)
+			var target_ = self.try_get_node(target_node)
+			var connect_ = self.try_get_node(connect_node)
 			if target_ and connect_:
 				execute_pipeline(pipeline_class, target_, [connect_] + args)
 				)
@@ -170,7 +166,7 @@ func signal_to_global_pipeline(connect_node, signal_name: String, pipeline_class
 
 	node_registry.connect_signal_deferred(connect_node, "", signal_name,
 		Callable(func(...args):
-			var connect_ = DeusWorld.instance.try_get_node(connect_node)
+			var connect_ = self.try_get_node(connect_node)
 			if connect_:
 				execute_global_pipeline(pipeline_class, [connect_] + args)
 				)
