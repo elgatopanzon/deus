@@ -33,6 +33,8 @@ func _init():
 	# register world pipelines
 	register_pipeline(WorldUpdatePipeline)
 	register_pipeline(WorldFixedUpdatePipeline)
+	register_pipeline(SetComponentPipeline)
+	register_pipeline(GetComponentPipeline)
 
 	instance = self
 
@@ -77,10 +79,15 @@ func set_node_id(node: Node, id: String):
 
 # component methods
 func set_component(node: Node, comp: Script, component: DefaultComponent) -> void:
-	component_registry.set_component(node, comp.get_global_name(), component)
+	execute_pipeline(SetComponentPipeline, node, {"component_name": comp.get_global_name(), "component": component})
+	
 
 func get_component(node: Node, component_class: Script) -> DefaultComponent:
-	return component_registry.get_component(node, component_class.get_global_name())
+	var res = execute_pipeline(GetComponentPipeline, node, {"component_name": component_class.get_global_name()})
+	if res.result.state == PipelineResult.SUCCESS:
+		return res.result.value
+
+	return null
 
 func has_component(node: Node, component_class: Script) -> bool:
 	return component_registry.has_component(node, component_class.get_global_name())

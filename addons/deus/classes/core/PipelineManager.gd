@@ -166,19 +166,10 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 		return false
 	return true
 
-# deep duplicates a component if possible
-func _duplicate_component(component):
-	if component is Resource:
-		return component.duplicate()
-	elif component.has_method("duplicate"):
-		return component.duplicate()
-	else:
-		return component
-
 # applies buffered components to a node via registry
-func _commit_buffered_components(context: PipelineContext, node: Node, component_registry: ComponentRegistry):
+func _commit_buffered_components(context: PipelineContext, node: Node, component_registry: ComponentRegistry, world: DeusWorld):
 	for key in context.components.keys():
-		component_registry.set_component(node, key, context.components[key])
+		run(SetComponentPipeline, node, component_registry, world, {"component_name": key, "component": context.components[key]})
 
 # calls function or runs pipeline during stage execution
 func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext, component_registry: ComponentRegistry, world: Object) -> void:
@@ -207,9 +198,9 @@ func _create_context_from_node(world: Object, node: Node, components: Array, com
 	var context := PipelineContext.new()
 	context.world = world
 	for comp in components:
-		var instance = component_registry.get_component(node, comp.get_global_name())
-		if instance != null:
-			context.components[comp.get_global_name()] = _duplicate_component(instance)
+		var res = run(GetComponentPipeline, node, component_registry, world, {"component_name": comp.get_global_name()})
+		if res.result.value != null:
+			context.components[comp.get_global_name()] = res.result.value
 	context.payload = null
 	context.result = PipelineResult.new()
 	context.result.reset()
@@ -273,7 +264,7 @@ func run(pipeline_class: Script, node: Node, component_registry: ComponentRegist
 			break
 
 	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS:
-		_commit_buffered_components(context, node, component_registry)
+		_commit_buffered_components(context, node, component_registry, world)
 		context._commit_node_properties()
 
 	# handle one-shot pipeline deregistration

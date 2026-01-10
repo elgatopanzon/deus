@@ -17,6 +17,7 @@ const CANCELLED = "cancelled"
 var state: String = SUCCESS
 var error_code: int = 0
 var error_message: String = ""
+var value
 
 func reset():
 	state = SUCCESS

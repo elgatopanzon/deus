@@ -30,18 +30,29 @@ func _get_sparse_set(component_name: String) -> SparseSet:
 		component_sets[component_name] = SparseSet.new()
 	return component_sets[component_name]
 
-func set_component(node: Node, component_name: String, component: DefaultComponent) -> void:
-	var entity_id = _ensure_entity_id(node)
+# initializes the node's component list if it doesn't have one
+func _initialize_node_components(node: Node) -> void:
 	if not node_components.has(node):
 		node_components[node] = []
-	if component_name not in node_components[node]:
-		node_components[node].append(component_name)
-		component_added.emit(node, entity_id, component_name, component)
-	else:
-		var components = _get_sparse_set(component_name)
-		var existing_component = components.get_value(entity_id)
-		if not _deep_compare_component(existing_component, component):
-			component_set.emit(node, entity_id, component_name, component)
+
+# checks if the component is new for the node
+func _is_new_component(node: Node, component_name: String) -> bool:
+	return component_name not in node_components[node]
+
+# adds a new component and emits the appropriate signal
+func _add_new_component(node: Node, entity_id: int, component_name: String, component: DefaultComponent) -> void:
+	node_components[node].append(component_name)
+	component_added.emit(node, entity_id, component_name, component)
+
+# updates an existing component if there are changes, and emits signal if necessary
+func _update_existing_component(node: Node, entity_id: int, component_name: String, component: DefaultComponent) -> void:
+	var components = _get_sparse_set(component_name)
+	var existing_component = components.get_value(entity_id)
+	if not _deep_compare_component(existing_component, component):
+		component_set.emit(node, entity_id, component_name, component)
+
+# adds the component to the sparse set
+func _add_component_to_sparse_set(entity_id: int, component_name: String, component: DefaultComponent) -> void:
 	var components = _get_sparse_set(component_name)
 	components.add(entity_id, component)
 
@@ -67,11 +78,6 @@ func _deep_compare_component(a: Resource, b: Resource) -> bool:
 				return false
 	return true
 
-func get_component(node: Node, component_name: String) -> DefaultComponent:
-	var entity_id = _ensure_entity_id(node)
-	var components = _get_sparse_set(component_name)
-	return components.get_value(entity_id).duplicate(true)
-
 func has_component(node: Node, component_name: String) -> bool:
 	var entity_id = _ensure_entity_id(node)
 	var components = _get_sparse_set(component_name)
@@ -89,14 +95,10 @@ func remove_component(node: Node, component_name: String) -> void:
 			node_components.erase(node)
 			component_removed_all.emit(node, entity_id, component_name)
 
-			
 func remove_all_components(node: Node) -> void:
 	if node_components.has(node):
 		for component_name in node_components[node]:
-			var components = _get_sparse_set(component_name)
-			var entity_id = _ensure_entity_id(node)
-			components.erase(entity_id)
-		node_components.erase(node)
+			remove_component(node, component_name)
 
 func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 	if requires.size() > 0:
