@@ -23,8 +23,11 @@ var delta_fixed: float
 func _init():
 	DeusConfig.init_project_config()
 
-	component_registry = ComponentRegistry.new()
+	# core dependency
 	pipeline_manager = PipelineManager.new(self)
+
+	# registries
+	component_registry = ComponentRegistry.new(self)
 	node_registry = NodeRegistry.new()
 	resource_registry = ResourceRegistry.new()
 
@@ -33,8 +36,6 @@ func _init():
 	# register world pipelines
 	register_pipeline(WorldUpdatePipeline)
 	register_pipeline(WorldFixedUpdatePipeline)
-	register_pipeline(SetComponentPipeline)
-	register_pipeline(GetComponentPipeline)
 
 	instance = self
 
@@ -78,16 +79,12 @@ func set_node_id(node: Node, id: String):
 	node_registry.set_node_id(node, id)
 
 # component methods
-func set_component(node: Node, comp: Script, component: DefaultComponent) -> void:
-	execute_pipeline(SetComponentPipeline, node, {"component_name": comp.get_global_name(), "component": component})
+func set_component(node: Node, component_class: Script, component: DefaultComponent) -> void:
+	component_registry.set_component(node, component_class.get_global_name(), component)
 	
 
 func get_component(node: Node, component_class: Script) -> DefaultComponent:
-	var res = execute_pipeline(GetComponentPipeline, node, {"component_name": component_class.get_global_name()})
-	if res.result.state == PipelineResult.SUCCESS:
-		return res.result.value
-
-	return null
+	return component_registry.get_component(node, component_class.get_global_name())
 
 func has_component(node: Node, component_class: Script) -> bool:
 	return component_registry.has_component(node, component_class.get_global_name())

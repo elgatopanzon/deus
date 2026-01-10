@@ -15,9 +15,19 @@ signal component_set(node, entity_id, component_name, component)
 signal component_removed(node, entity_id, component_name)
 signal component_removed_all(node, entity_id, component_name)
 
+var _world: DeusWorld
+var _pipeline_set_component = SetComponentPipeline
+var _pipeline_get_component = GetComponentPipeline
+
 var component_sets = {}
 var next_entity_id: int = 0
 var node_components = {} # keeps track of nodes and their components (by name)
+
+func _init(world: DeusWorld):
+	_world = world
+
+	_world.register_pipeline(_pipeline_set_component)
+	_world.register_pipeline(_pipeline_get_component)
 
 func _ensure_entity_id(node: Node) -> int:
 	if not node.has_meta("entity_id"):
@@ -77,6 +87,17 @@ func _deep_compare_component(a: Resource, b: Resource) -> bool:
 			if not is_same(a_val, b_val):
 				return false
 	return true
+
+func set_component(node: Node, component_name: String, component: DefaultComponent) -> void:
+	_world.execute_pipeline(_pipeline_set_component, node, {"component_name": component_name, "component": component})
+	
+
+func get_component(node: Node, component_name: String) -> DefaultComponent:
+	var res = _world.execute_pipeline(_pipeline_get_component, node, {"component_name": component_name})
+	if res.result.state == PipelineResult.SUCCESS:
+		return res.result.value
+
+	return null
 
 func has_component(node: Node, component_name: String) -> bool:
 	var entity_id = _ensure_entity_id(node)

@@ -174,7 +174,7 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 # applies buffered components to a node via registry
 func _commit_buffered_components(context: PipelineContext, node: Node):
 	for key in context.components.keys():
-		run(SetComponentPipeline, node, {"component_name": key, "component": context.components[key]})
+		_world.component_registry.set_component(node, key, context.components[key])
 
 # calls function or runs pipeline during stage execution
 func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext) -> void:
@@ -203,9 +203,9 @@ func _create_context_from_node(node: Node, components: Array) -> PipelineContext
 	var context := PipelineContext.new()
 	context.world = _world
 	for comp in components:
-		var res = run(GetComponentPipeline, node, {"component_name": comp.get_global_name()})
-		if res.result.value != null:
-			context.components[comp.get_global_name()] = res.result.value
+		var comp_value = _world.component_registry.get_component(node, comp.get_global_name())
+		if comp_value != null:
+			context.components[comp.get_global_name()] = comp_value
 	context.payload = null
 	context.result = PipelineResult.new()
 	context.result.reset()
