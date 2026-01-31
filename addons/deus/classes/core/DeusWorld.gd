@@ -37,6 +37,7 @@ func _init():
 	PipelineSchedulerDefaults.init_default_environment(pipeline_scheduler)
 
 	add_child(node_registry)
+	add_child(pipeline_scheduler)
 
 
 func _enter_tree():
