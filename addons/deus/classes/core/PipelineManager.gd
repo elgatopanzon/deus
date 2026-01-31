@@ -115,6 +115,9 @@ func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before:
 	if pipelines.has(pipeline_class_name):
 		if not pipelines[pipeline_class_name]["stages"].has(stage_func):
 			pipelines[pipeline_class_name]["stages"][stage_func] = []
+		# Idempotency guard — prevent duplicate injection on scene reload
+		if injected_fn_or_pipeline in pipelines[pipeline_class_name]["stages"][stage_func]:
+			return
 		if before:
 			pipelines[pipeline_class_name]["stages"][stage_func].insert(priority, injected_fn_or_pipeline)
 		else:
