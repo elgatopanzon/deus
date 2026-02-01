@@ -189,7 +189,7 @@ var inv = Deus.get_resource(my_node, "inventory")
 
 ### Phase 2: Post-Launch
 - [ ] Entity and component serialisation
-- [ ] Breakout demo project
+- [x] Breakout demo project - [deus-breakout](https://github.com/elgatopanzon/deus-breakout)
 - [ ] GUI application demo project
 - [ ] Performance optimisations and query caching
 - [ ] Editor tooling and debugging tools
@@ -203,6 +203,7 @@ MIT
 
 ## Completed Work
 
+- **2026-01-31** - Breakout demo project (Godot Deus - P2 Post-Launch)
 - **2026-01-10** - Pipeline scheduler with phase groups (Godot Deus - P1 MVP)
 - **2026-01-10** - Pipeline execution with dependency injection and multi-stage support (Godot Deus - P1 MVP)
 - **2026-01-10** - Stable component registry with SparseSet storage (Godot Deus - P1 MVP)
