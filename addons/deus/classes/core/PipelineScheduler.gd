@@ -151,6 +151,9 @@ func _immediate_register_phase_group(group: Script):
 func _immediate_register_phase(group: Script, phase: Script, before = null, after = null) -> void:
 	_immediate_register_phase_group(group)
 	var phase_list = phase_groups[group]
+	# Only allow the phase to be registered once per group
+	if phase in phase_list:
+		return
 	if before != null and before in phase_list:
 		phase_list.insert(phase_list.find(before), phase)
 	elif after != null and after in phase_list:
