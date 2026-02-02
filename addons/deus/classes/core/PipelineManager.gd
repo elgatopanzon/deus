@@ -175,9 +175,15 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 	return true
 
 # applies buffered components to a node via registry
+# Skips set_component pipeline when buffered value matches current SparseSet value
 func _commit_buffered_components(context: PipelineContext, node: Node):
+	var registry = _world.component_registry
+	var entity_id = registry._ensure_entity_id(node)
 	for key in context.components.keys():
-		_world.component_registry.set_component(node, key, context.components[key])
+		var current = registry._get_sparse_set(key).get_value(entity_id)
+		if current != null and registry._deep_compare_component(current, context.components[key]):
+			continue
+		registry.set_component(node, key, context.components[key])
 
 # calls function or runs pipeline during stage execution
 func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext) -> void:
