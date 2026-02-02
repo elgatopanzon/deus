@@ -22,6 +22,9 @@ var _pipeline_get_component = GetComponentPipeline
 var component_sets = {}
 var next_entity_id: int = 0
 var node_components = {} # keeps track of nodes and their components (by name)
+var _matching_nodes_cache = {} # cache for get_matching_nodes results
+var _cache_generation: int = 0 # incremented when component topology changes
+var _script_property_cache = {} # cached script-variable property names per class
 
 func _init(world: DeusWorld):
 	_world = world
@@ -52,6 +55,7 @@ func _is_new_component(node: Node, component_name: String) -> bool:
 # adds a new component and emits the appropriate signal
 func _add_new_component(node: Node, entity_id: int, component_name: String, component: DefaultComponent) -> void:
 	node_components[node].append(component_name)
+	_invalidate_matching_cache()
 	component_added.emit(node, entity_id, component_name, component)
 
 # updates an existing component if there are changes, and emits signal if necessary
@@ -66,26 +70,33 @@ func _add_component_to_sparse_set(entity_id: int, component_name: String, compon
 	var components = _get_sparse_set(component_name)
 	components.add(entity_id, component)
 
+# returns cached list of script-variable property names for a Resource class
+func _get_script_properties(res: Resource) -> Array:
+	var script = res.get_script()
+	if script and _script_property_cache.has(script):
+		return _script_property_cache[script]
+	var props = []
+	for property in res.get_property_list():
+		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			props.append(property.name)
+	if script:
+		_script_property_cache[script] = props
+	return props
+
 # does a deep comparison of each property
 func _deep_compare_component(a: Resource, b: Resource) -> bool:
 	if a == null or b == null:
 		return a == b
 	if a == b:
 		return true
-	for property in a.get_property_list():
-		if not property.has("name"):
-			continue
-		var name = property.name
-		if not b.has_method("get") or not a.has_method("get"):
-			continue
-		var a_val = a.get(name)
-		var b_val = b.get(name)
+	for prop_name in _get_script_properties(a):
+		var a_val = a.get(prop_name)
+		var b_val = b.get(prop_name)
 		if a_val is Resource and b_val is Resource:
 			if not _deep_compare_component(a_val, b_val):
 				return false
-		else:
-			if not is_same(a_val, b_val):
-				return false
+		elif not is_same(a_val, b_val):
+			return false
 	return true
 
 func set_component(node: Node, component_name: String, component: DefaultComponent) -> void:
@@ -108,6 +119,7 @@ func remove_component(node: Node, component_name: String) -> void:
 	var entity_id = _ensure_entity_id(node)
 	var components = _get_sparse_set(component_name)
 	components.erase(entity_id)
+	_invalidate_matching_cache()
 	component_removed.emit(node, entity_id, component_name)
 
 	if node_components.has(node):
@@ -132,10 +144,24 @@ func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 				return false
 	return true
 
+func _invalidate_matching_cache() -> void:
+	_cache_generation += 1
+	_matching_nodes_cache.clear()
+
 # returns a list of nodes that have all required components and none of the excluded components
 func get_matching_nodes(requires: Array, exclude: Array) -> Array:
+	# Build cache key from component names
+	var key = str(_cache_generation) + ":"
+	for r in requires:
+		key += r.get_global_name() + ","
+	key += "|"
+	for e in exclude:
+		key += e.get_global_name() + ","
+	if _matching_nodes_cache.has(key):
+		return _matching_nodes_cache[key]
 	var result = []
 	for node in node_components.keys():
 		if components_match(node, requires, exclude):
 			result.append(node)
+	_matching_nodes_cache[key] = result
 	return result
