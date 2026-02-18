@@ -93,8 +93,10 @@ func register_pipeline(pipeline_class: Script) -> void:
 				stages[stage_name] = [Callable(pipeline_class, m.name)]
 
 	var components = _get_pipeline_class_components(pipeline_class)
+	var stage_data = stages.duplicate(true)
 	pipelines[name] = {
-		"stages": stages.duplicate(true),
+		"stages": stage_data,
+		"_stage_keys": stage_data.keys(),
 		"requires": components["requires"].duplicate(),
 		"optional": components["optional"].duplicate(),
 		"exclude": components["exclude"].duplicate(),
@@ -113,7 +115,8 @@ func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before:
 	var pipeline_class_name = target_callable.get_object().get_global_name()
 	var stage_func = pipeline_class_name + "." + target_callable.get_method()
 	if pipelines.has(pipeline_class_name):
-		if not pipelines[pipeline_class_name]["stages"].has(stage_func):
+		var had_stage = pipelines[pipeline_class_name]["stages"].has(stage_func)
+		if not had_stage:
 			pipelines[pipeline_class_name]["stages"][stage_func] = []
 		# Idempotency guard — prevent duplicate injection on scene reload
 		if injected_fn_or_pipeline in pipelines[pipeline_class_name]["stages"][stage_func]:
@@ -122,6 +125,9 @@ func inject_pipeline(injected_fn_or_pipeline, target_callable: Callable, before:
 			pipelines[pipeline_class_name]["stages"][stage_func].insert(priority, injected_fn_or_pipeline)
 		else:
 			pipelines[pipeline_class_name]["stages"][stage_func].append(injected_fn_or_pipeline)
+		# rebuild cached stage keys when a new stage was added
+		if not had_stage:
+			pipelines[pipeline_class_name]["_stage_keys"] = pipelines[pipeline_class_name]["stages"].keys()
 
 		pipeline_injected.emit(injected_fn_or_pipeline, target_callable.get_object(), target_callable)
 
@@ -267,7 +273,7 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 	if payload != null:
 		context.payload = payload
 
-	for stage in data["stages"].keys():
+	for stage in data["_stage_keys"]:
 		if context.result.state != PipelineResult.SUCCESS:
 			break
 		for fn_or_pipe in data["stages"][stage]:
