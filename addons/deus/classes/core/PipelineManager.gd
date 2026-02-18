@@ -235,12 +235,13 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 			context.components[key] = sub_result.context.components[key]
 
 # acquires a PipelineContext from the pool or creates a new one
+# always provides a fresh PipelineResult so callers holding the old one are unaffected
 func _acquire_context() -> PipelineContext:
 	if _context_pool.size() > 0:
-		return _context_pool.pop_back()
-	var ctx = PipelineContext.new()
-	ctx.result = PipelineResult.new()
-	return ctx
+		var ctx = _context_pool.pop_back()
+		ctx.result = PipelineResult.new()
+		return ctx
+	return PipelineContext.new()
 
 # returns a PipelineContext to the pool for reuse
 func _release_context(context: PipelineContext) -> void:
@@ -355,7 +356,8 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 	return {"context": context, "result": context.result}
 
 # batch-execute a pipeline over multiple pre-matched nodes
-# creates a fresh context per entity so lambda captures on context.world remain valid after the loop.
+# acquires a pooled context per entity and releases it after use.
+# node_results holds each entity's PipelineResult; the context itself does not escape.
 # returns node -> PipelineResult matching the single-node run() contract.
 func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload = null) -> Dictionary:
 	var registry = _world.component_registry
@@ -366,7 +368,7 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 
 	var node_results = {}
 	for node in nodes:
-		var context := PipelineContext.new()
+		var context := _acquire_context()
 		context.world = _world
 		# populate context for this entity (inline _create_context_from_node)
 		# stores original refs without cloning; clones happen lazily on first access
@@ -406,6 +408,9 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 
 		pipeline_executed.emit(pipeline_class, node, payload, context.result)
 
+		# snapshot result before releasing context back to pool
+		# _acquire_context gives a fresh PipelineResult so this ref stays valid
 		node_results[node] = context.result
+		_release_context(context)
 
 	return node_results
