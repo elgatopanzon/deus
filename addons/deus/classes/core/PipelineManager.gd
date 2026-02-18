@@ -185,11 +185,14 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 
 # applies buffered components to a node via registry
 # Skips set_component pipeline when buffered value matches current SparseSet value
+# Uses direct SparseSet access to avoid _get_sparse_set dictionary lookup per key
 func _commit_buffered_components(context: PipelineContext, node: Node):
 	var registry = _world.component_registry
 	var entity_id = registry._ensure_entity_id(node)
+	var comp_sets = registry.component_sets
 	for key in context.components.keys():
-		var current = registry._get_sparse_set(key).get_value(entity_id)
+		var ss = comp_sets.get(key)
+		var current = ss.get_value(entity_id) if ss != null else null
 		if current != null and registry._deep_compare_component(current, context.components[key]):
 			continue
 		registry.set_component(node, key, context.components[key])
@@ -230,13 +233,17 @@ func _release_context(context: PipelineContext) -> void:
 	_context_pool.push_back(context)
 
 # creates processing context for a node and its components
+# uses direct SparseSet access to bypass GetComponentPipeline overhead
 func _create_context_from_node(node: Node, components: Array) -> PipelineContext:
 	var context := _acquire_context()
 	context.world = _world
+	var registry = _world.component_registry
+	var entity_id = registry._ensure_entity_id(node)
 	for comp in components:
-		var comp_value = _world.component_registry.get_component(node, comp.get_global_name())
+		var comp_name = comp.get_global_name()
+		var comp_value = registry.get_component_direct(entity_id, comp_name)
 		if comp_value != null:
-			context.components[comp.get_global_name()] = comp_value
+			context.components[comp_name] = comp_value
 	context.payload = null
 	context.result.reset()
 	context._node = node

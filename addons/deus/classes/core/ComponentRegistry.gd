@@ -139,6 +139,16 @@ func get_component(node: Node, component_name: String) -> DefaultComponent:
 
 	return null
 
+# fast path for component loading -- direct SparseSet access, no pipeline overhead
+func get_component_direct(entity_id: int, component_name: String) -> DefaultComponent:
+	var ss = component_sets.get(component_name)
+	if ss == null:
+		return null
+	var val = ss.get_value(entity_id)
+	if val == null:
+		return null
+	return val.duplicate(true)
+
 func has_component(node: Node, component_name: String) -> bool:
 	var entity_id = _ensure_entity_id(node)
 	var components = _get_sparse_set(component_name)
