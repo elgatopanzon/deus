@@ -333,7 +333,7 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 		if context.result.state != PipelineResult.SUCCESS:
 			break
 
-	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS:
+	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS and context.has_pending_writes():
 		_commit_buffered_components(context, node)
 		context._commit_node_properties()
 
@@ -392,8 +392,8 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 			if context.result.state != PipelineResult.SUCCESS:
 				break
 
-		# commit buffered components on success
-		if context.result.state == PipelineResult.SUCCESS:
+		# commit buffered components on success (skip if no writes occurred)
+		if context.result.state == PipelineResult.SUCCESS and context.has_pending_writes():
 			_commit_buffered_components(context, node)
 			context._commit_node_properties()
 

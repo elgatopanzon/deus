@@ -139,5 +139,8 @@ func reset():
 	node_property_cache.reset()
 	_property_dict.clear()
 
+func has_pending_writes() -> bool:
+	return components.size() > 0 or node_property_cache._cache.size() > 0
+
 func _commit_node_properties():
 	node_property_cache.commit()
