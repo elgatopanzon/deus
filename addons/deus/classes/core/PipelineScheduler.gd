@@ -39,9 +39,13 @@ var tasks: Dictionary = {}
 # per-phase and per-group scheduling control
 var phase_scheduling_enabled: Dictionary = {}
 
-# deferred queues for registration and deregistration
-var _queued_registrations: Array = []
-var _queued_deregistrations: Array = []
+# deferred queues for registration and deregistration, typed per operation
+var _queued_reg_groups: Array = []
+var _queued_reg_phases: Array = []
+var _queued_reg_tasks: Array = []
+var _queued_dereg_groups: Array = []
+var _queued_dereg_phases: Array = []
+var _queued_dereg_tasks: Array = []
 
 
 func _init(world: DeusWorld):
@@ -57,88 +61,62 @@ func is_phase_scheduling_enabled(phase_or_group: Script) -> bool:
 
 # phase group registration
 func register_phase_group(group: Script):
-	_queued_registrations.append({
-		"type": "group",
-		"group": group
-	})
+	_queued_reg_groups.append(group)
 
 func get_group_phases(group: Script) -> Array:
 	return phase_groups.get(group, [])
 
 # phase registration
 func register_phase(group: Script, phase: Script, before = null, after = null) -> void:
-	_queued_registrations.append({
-		"type": "phase",
-		"group": group,
-		"phase": phase,
-		"before": before,
-		"after": after
-	})
+	_queued_reg_phases.append([group, phase, before, after])
 
 # task registration
 func register_task(phase: Script, pipeline: Script, frequency: float = 0.0, before = null, after = null, priority: int = 0) -> void:
-	_queued_registrations.append({
-		"type": "task",
-		"phase": phase,
-		"pipeline": pipeline,
-		"frequency": frequency,
-		"before": before,
-		"after": after,
-		"priority": priority
-	})
+	_queued_reg_tasks.append([phase, pipeline, frequency, before, after, priority])
 
 # task deregistration
 func deregister_task(phase: Script, pipeline: Script) -> void:
-	_queued_deregistrations.append({
-		"type": "task",
-		"phase": phase,
-		"pipeline": pipeline
-	})
+	_queued_dereg_tasks.append([phase, pipeline])
 
 # phase deregistration
 func deregister_phase(group: Script, phase: Script) -> void:
-	_queued_deregistrations.append({
-		"type": "phase",
-		"group": group,
-		"phase": phase
-	})
+	_queued_dereg_phases.append([group, phase])
 
 # phase group deregistration
 func deregister_phase_group(group: Script) -> void:
-	_queued_deregistrations.append({
-		"type": "group",
-		"group": group
-	})
+	_queued_dereg_groups.append(group)
 
 
 # executes all deferred registrations and deregistrations
 func _process(_delta: float) -> void:
-	_process_deregistrations()
-	_process_registrations()
+	if not _queued_dereg_tasks.is_empty() or not _queued_dereg_phases.is_empty() or not _queued_dereg_groups.is_empty():
+		_process_deregistrations()
+	if not _queued_reg_groups.is_empty() or not _queued_reg_phases.is_empty() or not _queued_reg_tasks.is_empty():
+		_process_registrations()
 
 # process all queued deregistrations first
 func _process_deregistrations() -> void:
-	for d in _queued_deregistrations:
-		match d.type:
-			"task":
-				_immediate_deregister_task(d.phase, d.pipeline)
-			"phase":
-				_immediate_deregister_phase(d.group, d.phase)
-			"group":
-				_immediate_deregister_phase_group(d.group)
-	_queued_deregistrations.clear()
+	for d in _queued_dereg_tasks:
+		_immediate_deregister_task(d[0], d[1])
+	_queued_dereg_tasks.clear()
+	for d in _queued_dereg_phases:
+		_immediate_deregister_phase(d[0], d[1])
+	_queued_dereg_phases.clear()
+	for d in _queued_dereg_groups:
+		_immediate_deregister_phase_group(d)
+	_queued_dereg_groups.clear()
 
 # process all queued registrations after
 func _process_registrations() -> void:
-	for r in _queued_registrations:
-		match r.type:
-			"group":
-				_immediate_register_phase_group(r.group)
-			"phase":
-				_immediate_register_phase(r.group, r.phase, r.before, r.after)
-			"task":
-				_immediate_register_task(r.phase, r.pipeline, r.frequency, r.before, r.after, r.priority)
-	_queued_registrations.clear()
+	for r in _queued_reg_groups:
+		_immediate_register_phase_group(r)
+	_queued_reg_groups.clear()
+	for r in _queued_reg_phases:
+		_immediate_register_phase(r[0], r[1], r[2], r[3])
+	_queued_reg_phases.clear()
+	for r in _queued_reg_tasks:
+		_immediate_register_task(r[0], r[1], r[2], r[3], r[4], r[5])
+	_queued_reg_tasks.clear()
 
 
 # immediate phase group registration logic
@@ -176,31 +154,28 @@ func _immediate_register_task(phase: Script, pipeline: Script, frequency: float 
 	var task = PipelineTask.new(pipeline, frequency, priority)
 
 	if before != null:
-		for i in range(len(task_list)):
+		for i in range(task_list.size()):
 			if task_list[i].pipeline == before:
 				task_list.insert(i, task)
-				_sort_tasks_by_priority(task_list)
 				return
 	if after != null:
-		for i in range(len(task_list)):
+		for i in range(task_list.size()):
 			if task_list[i].pipeline == after:
 				task_list.insert(i + 1, task)
-				_sort_tasks_by_priority(task_list)
 				return
 
-	task_list.append(task)
-	_sort_tasks_by_priority(task_list)
+	_sorted_insert(task_list, task)
 
 # immediate task deregistration logic
 func _immediate_deregister_task(phase: Script, pipeline: Script) -> void:
 	if tasks.has(phase):
 		var task_list = tasks[phase]
-		for i in range(len(task_list)):
+		for i in range(task_list.size()):
 			if task_list[i].pipeline == pipeline:
-				task_list.remove(i)
+				task_list.remove_at(i)
 				break
 		# remove the phase entry if no tasks left
-		if task_list.empty():
+		if task_list.is_empty():
 			tasks.erase(phase)
 
 # immediate phase deregistration logic
@@ -208,7 +183,7 @@ func _immediate_deregister_phase(group: Script, phase: Script) -> void:
 	if phase_groups.has(group):
 		phase_groups[group].erase(phase)
 		# remove the group's entry if empty
-		if phase_groups[group].empty():
+		if phase_groups[group].is_empty():
 			phase_groups.erase(group)
 	# also deregister any associated tasks
 	if tasks.has(phase):
@@ -238,38 +213,39 @@ func _immediate_deregister_phase_group(group: Script) -> void:
 		phase_scheduling_enabled.erase(group)
 
 
-# helper to sort by priority descending (higher = earlier)
-func _sort_tasks_by_priority(task_list: Array) -> void:
-	task_list.sort_custom(_sort_priority)
-
-func _sort_priority(a, b):
-	# first, compare by priority descending
-	if a.priority > b.priority:
-		return -1
-	elif a.priority < b.priority:
-		return 1
-	return 0
+# binary search insert maintaining priority descending order (higher = earlier)
+func _sorted_insert(task_list: Array, task: PipelineTask) -> void:
+	var lo := 0
+	var hi := task_list.size()
+	var p := task.priority
+	while lo < hi:
+		var mid := (lo + hi) >> 1
+		if task_list[mid].priority >= p:
+			lo = mid + 1
+		else:
+			hi = mid
+	task_list.insert(lo, task)
 
 
 func run_tasks(group: Script, delta: float) -> void:
 	_world.delta = delta
-	_run_scheduled_tasks(group)
+	var now := Time.get_ticks_msec() / 1000.0
+	_run_scheduled_tasks(group, now)
 
 func run_tasks_now(phase: Script) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
 	for task in tasks.get(phase, []):
 		if task.enabled:
 			_world.execute_global_pipeline(task.pipeline)
-			task.last_run = Time.get_ticks_msec() / 1000.0
+			task.last_run = now
 	for subphase in phase_groups.get(phase, []):
 		run_tasks_now(subphase)
 
 
 # runs scheduled tasks recursively for phases and phase groups
-func _run_scheduled_tasks(phase_or_group: Script) -> void:
+func _run_scheduled_tasks(phase_or_group: Script, now: float) -> void:
 	if not is_phase_scheduling_enabled(phase_or_group):
 		return
-
-	var now = Time.get_ticks_msec() / 1000.0
 
 	# run tasks attached to this phase/group
 	for task in tasks.get(phase_or_group, []):
@@ -282,4 +258,4 @@ func _run_scheduled_tasks(phase_or_group: Script) -> void:
 	# recursively run tasks for sub-phases,
 	# but only if scheduling is enabled for that subphase/group
 	for subphase in phase_groups.get(phase_or_group, []):
-		_run_scheduled_tasks(subphase)
+		_run_scheduled_tasks(subphase, now)
