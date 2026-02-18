@@ -27,11 +27,31 @@ var _matching_nodes_cache = {} # cache for get_matching_nodes results
 var _cache_generation: int = 0 # incremented when component topology changes
 var _script_property_cache = {} # cached script-variable property names per class
 
+# bitset cache: each component type gets a unique bit, each entity tracks a bitmask
+var _component_bit_index = {} # component_name -> int bit position
+var _next_bit_index: int = 0
+var _entity_bitmask = {} # entity_id -> int bitmask of owned components
+var _filter_bitmask_cache = {} # cache key -> [require_mask, exclude_mask]
+
 func _init(world: DeusWorld):
 	_world = world
 
 	_world.register_pipeline(_pipeline_set_component)
 	_world.register_pipeline(_pipeline_get_component)
+
+# returns the bit index for a component name, assigning one if new
+func _get_component_bit(component_name: String) -> int:
+	if not _component_bit_index.has(component_name):
+		_component_bit_index[component_name] = _next_bit_index
+		_next_bit_index += 1
+	return _component_bit_index[component_name]
+
+# converts a require or exclude script array into a single bitmask
+func _build_filter_bitmask(components: Array) -> int:
+	var mask: int = 0
+	for comp in components:
+		mask |= (1 << _get_component_bit(comp.get_global_name()))
+	return mask
 
 func _ensure_entity_id(node: Node) -> int:
 	if not node.has_meta("entity_id"):
@@ -59,6 +79,11 @@ func _add_new_component(node: Node, entity_id: int, component_name: String, comp
 	if not _component_nodes.has(component_name):
 		_component_nodes[component_name] = []
 	_component_nodes[component_name].append(node)
+	# update entity bitmask
+	var bit = _get_component_bit(component_name)
+	if not _entity_bitmask.has(entity_id):
+		_entity_bitmask[entity_id] = 0
+	_entity_bitmask[entity_id] |= (1 << bit)
 	_invalidate_matching_cache()
 	component_added.emit(node, entity_id, component_name, component)
 
@@ -125,6 +150,9 @@ func remove_component(node: Node, component_name: String) -> void:
 	components.erase(entity_id)
 	if _component_nodes.has(component_name):
 		_component_nodes[component_name].erase(node)
+	# clear entity bitmask bit
+	if _component_bit_index.has(component_name) and _entity_bitmask.has(entity_id):
+		_entity_bitmask[entity_id] &= ~(1 << _component_bit_index[component_name])
 	_invalidate_matching_cache()
 	component_removed.emit(node, entity_id, component_name)
 
@@ -146,24 +174,23 @@ func remove_all_components(node: Node) -> void:
 			_component_nodes[component_name].erase(node)
 		component_removed.emit(node, entity_id, component_name)
 	node_components.erase(node)
+	# clear entire entity bitmask
+	_entity_bitmask.erase(entity_id)
 	_invalidate_matching_cache()
 	if comp_names.size() > 0:
 		component_removed_all.emit(node, entity_id, comp_names[-1])
 
 func components_match(node: Node, requires: Array, exclude: Array) -> bool:
-	if requires.size() > 0:
-		for comp_name in requires:
-			if not has_component(node, comp_name.get_global_name()):
-				return false
-	if exclude.size() > 0:
-		for comp_name in exclude:
-			if has_component(node, comp_name.get_global_name()):
-				return false
-	return true
+	var entity_id = _ensure_entity_id(node)
+	var entity_mask: int = _entity_bitmask.get(entity_id, 0)
+	var req_mask: int = _build_filter_bitmask(requires)
+	var exc_mask: int = _build_filter_bitmask(exclude)
+	return (entity_mask & req_mask) == req_mask and (entity_mask & exc_mask) == 0
 
 func _invalidate_matching_cache() -> void:
 	_cache_generation += 1
 	_matching_nodes_cache.clear()
+	_filter_bitmask_cache.clear()
 
 # returns a list of nodes that have all required components and none of the excluded components
 func get_matching_nodes(requires: Array, exclude: Array) -> Array:
@@ -177,51 +204,49 @@ func get_matching_nodes(requires: Array, exclude: Array) -> Array:
 	if _matching_nodes_cache.has(key):
 		return _matching_nodes_cache[key]
 
+	# build or retrieve cached filter bitmasks
+	var req_mask: int
+	var exc_mask: int
+	if _filter_bitmask_cache.has(key):
+		var cached = _filter_bitmask_cache[key]
+		req_mask = cached[0]
+		exc_mask = cached[1]
+	else:
+		req_mask = _build_filter_bitmask(requires)
+		exc_mask = _build_filter_bitmask(exclude)
+		_filter_bitmask_cache[key] = [req_mask, exc_mask]
+
 	var result: Array
 	if requires.size() == 0:
-		# no requires: start from all known nodes
-		result = node_components.keys()
+		# no requires: start from all known nodes, filter by exclude only
+		if exc_mask == 0:
+			result = node_components.keys()
+		else:
+			result = []
+			for node in node_components:
+				var eid: int = _ensure_entity_id(node)
+				if (_entity_bitmask.get(eid, 0) & exc_mask) == 0:
+					result.append(node)
 	else:
 		# find smallest candidate set from _component_nodes to minimise iterations
 		var smallest_name: String = ""
 		var smallest_size: int = -1
 		for r in requires:
-			var name = r.get_global_name()
-			var sz = _component_nodes[name].size() if _component_nodes.has(name) else 0
+			var rname = r.get_global_name()
+			var sz = _component_nodes[rname].size() if _component_nodes.has(rname) else 0
 			if smallest_size == -1 or sz < smallest_size:
-				smallest_name = name
+				smallest_name = rname
 				smallest_size = sz
 		if smallest_size == 0:
 			_matching_nodes_cache[key] = []
 			return []
-		# start from smallest set and filter by remaining requires
-		result = _component_nodes[smallest_name].duplicate()
-		for r in requires:
-			var name = r.get_global_name()
-			if name == smallest_name:
-				continue
-			if not _component_nodes.has(name):
-				_matching_nodes_cache[key] = []
-				return []
-			var other = _component_nodes[name]
-			var filtered = []
-			for node in result:
-				if node in other:
-					filtered.append(node)
-			result = filtered
-
-	# filter out excluded components
-	if exclude.size() > 0:
-		var filtered = []
-		for node in result:
-			var excluded = false
-			for e in exclude:
-				if has_component(node, e.get_global_name()):
-					excluded = true
-					break
-			if not excluded:
-				filtered.append(node)
-		result = filtered
+		# iterate smallest set and filter with bitwise check
+		result = []
+		for node in _component_nodes[smallest_name]:
+			var eid: int = _ensure_entity_id(node)
+			var emask: int = _entity_bitmask.get(eid, 0)
+			if (emask & req_mask) == req_mask and (emask & exc_mask) == 0:
+				result.append(node)
 
 	_matching_nodes_cache[key] = result
 	return result
