@@ -27,6 +27,10 @@ var pipeline_result_handlers = {}
 # avoids get_global_name() + dictionary lookups in the hot path
 var _resolved_injections: Dictionary = {}
 
+# pre-grouped result handlers: Script -> { state_string -> [handler_pipeline_Script, ...] }
+# avoids get_global_name(), string-keyed dict lookup, and per-handler state scan in hot path
+var _resolved_result_handlers: Dictionary = {}
+
 # pool of reusable PipelineContext objects to avoid per-run allocation
 var _context_pool: Array = []
 
@@ -148,6 +152,7 @@ func deregister_pipeline(pipeline_class: Script) -> void:
 		pipelines.erase(name)
 		pipeline_result_handlers.erase(name)
 		_resolved_injections.erase(pipeline_class)
+		_resolved_result_handlers.erase(pipeline_class)
 
 		pipeline_deregistered.emit(pipeline_class)
 
@@ -270,15 +275,24 @@ func inject_pipeline_result_handler(parent_pipeline: Script, handler_pipeline: S
 		"result_states": result_states.duplicate()
 	})
 
+	# populate pre-grouped Script -> state -> handlers cache
+	if not _resolved_result_handlers.has(parent_pipeline):
+		_resolved_result_handlers[parent_pipeline] = {}
+	var by_state: Dictionary = _resolved_result_handlers[parent_pipeline]
+	for state in result_states:
+		if not by_state.has(state):
+			by_state[state] = []
+		by_state[state].append(handler_pipeline)
+
 	pipeline_result_handler_injected.emit(parent_pipeline, handler_pipeline, result_states)
 
 # run all result handler pipelines associated with a given result state
+# uses pre-grouped Script -> state -> handlers cache for direct dispatch
 func _run_result_handlers(pipeline_class: Script, node: Node, context: PipelineContext, result_state) -> void:
-	var name = pipeline_class.get_global_name()
-	if pipeline_result_handlers.has(name):
-		for handler in pipeline_result_handlers[name]:
-			if handler.result_states.has(result_state):
-				self.run(handler.handler_pipeline, node, context.payload, context)
+	var by_state: Dictionary = _resolved_result_handlers.get(pipeline_class, {})
+	var handlers: Array = by_state.get(result_state, [])
+	for handler_pipeline in handlers:
+		self.run(handler_pipeline, node, context.payload if context else null, context)
 
 # main pipeline run logic
 # _data_override skips get_global_name() + dict lookup when caller already has data;
