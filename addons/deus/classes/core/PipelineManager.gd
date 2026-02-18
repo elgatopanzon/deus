@@ -248,7 +248,7 @@ func _release_context(context: PipelineContext) -> void:
 	_context_pool.push_back(context)
 
 # creates processing context for a node and its components
-# uses direct SparseSet access to bypass GetComponentPipeline overhead
+# stores original refs without cloning; clones happen lazily on first access
 func _create_context_from_node(node: Node, components: Array) -> PipelineContext:
 	var context := _acquire_context()
 	context.world = _world
@@ -256,9 +256,9 @@ func _create_context_from_node(node: Node, components: Array) -> PipelineContext
 	var entity_id = registry._ensure_entity_id(node)
 	for comp in components:
 		var comp_name = comp.get_global_name()
-		var comp_value = registry.get_component_direct(entity_id, comp_name)
+		var comp_value = registry.get_component_ref(entity_id, comp_name)
 		if comp_value != null:
-			context.components[comp_name] = comp_value
+			context.original_components[comp_name] = comp_value
 	context.payload = null
 	context.result.reset()
 	context._node = node
@@ -369,12 +369,13 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 		var context := PipelineContext.new()
 		context.world = _world
 		# populate context for this entity (inline _create_context_from_node)
+		# stores original refs without cloning; clones happen lazily on first access
 		var entity_id = registry._ensure_entity_id(node)
 		for comp in all_comps:
 			var comp_name = comp.get_global_name()
-			var comp_value = registry.get_component_direct(entity_id, comp_name)
+			var comp_value = registry.get_component_ref(entity_id, comp_name)
 			if comp_value != null:
-				context.components[comp_name] = comp_value
+				context.original_components[comp_name] = comp_value
 		context.payload = payload
 		context._node = node
 

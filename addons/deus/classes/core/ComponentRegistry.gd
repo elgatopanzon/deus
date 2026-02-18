@@ -154,6 +154,13 @@ func get_component_direct(entity_id: int, component_name: String) -> DefaultComp
 		return null
 	return val.duplicate(true)
 
+# returns the original component ref without cloning, for lazy-clone context population
+func get_component_ref(entity_id: int, component_name: String) -> DefaultComponent:
+	var ss = component_sets.get(component_name)
+	if ss == null:
+		return null
+	return ss.get_value(entity_id)
+
 func has_component(node: Node, component_name: String) -> bool:
 	var entity_id = _ensure_entity_id(node)
 	var components = _get_sparse_set(component_name)

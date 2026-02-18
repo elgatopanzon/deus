@@ -88,6 +88,10 @@ var components = {}
 var payload
 var result
 
+# lazy clone support: original_components holds raw refs from SparseSet,
+# components is populated lazily on first access with cloned copies
+var original_components = {}
+
 var node_property_cache
 var _property_dict = {}
 
@@ -104,8 +108,13 @@ func _get(property):
 		return node_property_cache._get(property)
 	elif components.has(property):
 		return components[property]
+	# lazy clone: component exists in originals but hasn't been cloned yet
+	elif original_components.has(property):
+		var clone = original_components[property].duplicate(true)
+		components[property] = clone
+		return clone
 	else:
-		return node_property_cache._get(property) 
+		return node_property_cache._get(property)
 
 func _set(property, value):
 	# set property to the backing dictionary 
@@ -116,6 +125,7 @@ func reset():
 	_node = null
 	world = null
 	components.clear()
+	original_components.clear()
 	payload = null
 	# result is NOT reset here -- callers may still hold a reference to it
 	# from the return dict. It gets reset on next acquire in _create_context_from_node.
