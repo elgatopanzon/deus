@@ -29,6 +29,9 @@ var nodes_by_meta: Dictionary = {}
 #    "callable": <Callable>
 # }
 var deferred_signal_queue: Array = []
+# dirty flag for lazy queue processing -- coalesces multiple tree_changed
+# signals per frame into a single flush
+var _deferred_queue_dirty: bool = false
 
 func _enter_tree():
 	var st = get_tree()
@@ -121,6 +124,13 @@ func _try_connect_signal(target, signal_name: String, callable: Callable, flags:
 	return connected
 
 func _on_tree_changed():
+	if deferred_signal_queue.size() > 0:
+		_deferred_queue_dirty = true
+
+func _process(_delta):
+	if not _deferred_queue_dirty:
+		return
+	_deferred_queue_dirty = false
 	var still_deferred : Array = []
 	for request in deferred_signal_queue:
 		if not _try_connect_signal(request.target, request.signal, request.callable):
