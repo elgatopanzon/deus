@@ -22,6 +22,7 @@ var _pipeline_get_component = GetComponentPipeline
 var component_sets = {}
 var next_entity_id: int = 0
 var node_components = {} # keeps track of nodes and their components (by name)
+var _component_nodes = {} # reverse index: component_name -> Array of nodes that have it
 var _matching_nodes_cache = {} # cache for get_matching_nodes results
 var _cache_generation: int = 0 # incremented when component topology changes
 var _script_property_cache = {} # cached script-variable property names per class
@@ -55,6 +56,9 @@ func _is_new_component(node: Node, component_name: String) -> bool:
 # adds a new component and emits the appropriate signal
 func _add_new_component(node: Node, entity_id: int, component_name: String, component: DefaultComponent) -> void:
 	node_components[node].append(component_name)
+	if not _component_nodes.has(component_name):
+		_component_nodes[component_name] = []
+	_component_nodes[component_name].append(node)
 	_invalidate_matching_cache()
 	component_added.emit(node, entity_id, component_name, component)
 
@@ -119,6 +123,8 @@ func remove_component(node: Node, component_name: String) -> void:
 	var entity_id = _ensure_entity_id(node)
 	var components = _get_sparse_set(component_name)
 	components.erase(entity_id)
+	if _component_nodes.has(component_name):
+		_component_nodes[component_name].erase(node)
 	_invalidate_matching_cache()
 	component_removed.emit(node, entity_id, component_name)
 
@@ -136,6 +142,8 @@ func remove_all_components(node: Node) -> void:
 	for component_name in comp_names:
 		var components = _get_sparse_set(component_name)
 		components.erase(entity_id)
+		if _component_nodes.has(component_name):
+			_component_nodes[component_name].erase(node)
 		component_removed.emit(node, entity_id, component_name)
 	node_components.erase(node)
 	_invalidate_matching_cache()
@@ -168,9 +176,52 @@ func get_matching_nodes(requires: Array, exclude: Array) -> Array:
 		key += e.get_global_name() + ","
 	if _matching_nodes_cache.has(key):
 		return _matching_nodes_cache[key]
-	var result = []
-	for node in node_components.keys():
-		if components_match(node, requires, exclude):
-			result.append(node)
+
+	var result: Array
+	if requires.size() == 0:
+		# no requires: start from all known nodes
+		result = node_components.keys()
+	else:
+		# find smallest candidate set from _component_nodes to minimise iterations
+		var smallest_name: String = ""
+		var smallest_size: int = -1
+		for r in requires:
+			var name = r.get_global_name()
+			var sz = _component_nodes[name].size() if _component_nodes.has(name) else 0
+			if smallest_size == -1 or sz < smallest_size:
+				smallest_name = name
+				smallest_size = sz
+		if smallest_size == 0:
+			_matching_nodes_cache[key] = []
+			return []
+		# start from smallest set and filter by remaining requires
+		result = _component_nodes[smallest_name].duplicate()
+		for r in requires:
+			var name = r.get_global_name()
+			if name == smallest_name:
+				continue
+			if not _component_nodes.has(name):
+				_matching_nodes_cache[key] = []
+				return []
+			var other = _component_nodes[name]
+			var filtered = []
+			for node in result:
+				if node in other:
+					filtered.append(node)
+			result = filtered
+
+	# filter out excluded components
+	if exclude.size() > 0:
+		var filtered = []
+		for node in result:
+			var excluded = false
+			for e in exclude:
+				if has_component(node, e.get_global_name()):
+					excluded = true
+					break
+			if not excluded:
+				filtered.append(node)
+		result = filtered
+
 	_matching_nodes_cache[key] = result
 	return result
