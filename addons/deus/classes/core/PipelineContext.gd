@@ -78,7 +78,11 @@ class NodePropertyCache:
 		_cache.clear()
 		_child_node_caches.clear()
 
-var _node
+var _node:
+	set(value):
+		_node = value
+		if node_property_cache:
+			node_property_cache._node = value
 var world
 var components = {}
 var payload
@@ -89,7 +93,7 @@ var _property_dict = {}
 
 func _init():
 	result = PipelineResult.new()
-	node_property_cache = NodePropertyCache.new(_node)
+	node_property_cache = NodePropertyCache.new(null)
 
 func _get(property):
 	# check property on the backing dictionary first

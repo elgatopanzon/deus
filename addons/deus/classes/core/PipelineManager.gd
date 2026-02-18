@@ -260,7 +260,6 @@ func _create_context_from_node(node: Node, components: Array) -> PipelineContext
 	context.payload = null
 	context.result.reset()
 	context._node = node
-	context.node_property_cache._node = node
 	return context
 
 # attach a handler pipeline for particular result states in a parent pipeline
@@ -376,7 +375,6 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 				context.components[comp_name] = comp_value
 		context.payload = payload
 		context._node = node
-		context.node_property_cache._node = node
 
 		pipeline_executing.emit(pipeline_class, node, payload)
 
