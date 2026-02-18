@@ -4,6 +4,11 @@
 extends Node
 
 const BenchPipeline = preload("res://benchmarks/BenchmarkPipeline.gd")
+const BenchPipelineMedium = preload("res://benchmarks/BenchmarkPipelineMedium.gd")
+const BenchPipelineComplex = preload("res://benchmarks/BenchmarkPipelineComplex.gd")
+const BenchCompA = preload("res://benchmarks/BenchComponentA.gd")
+const BenchCompB = preload("res://benchmarks/BenchComponentB.gd")
+const BenchCompC = preload("res://benchmarks/BenchComponentC.gd")
 
 # entity count used by benchmarks that scale with entity size
 @export var entity_count: int = 1000
@@ -43,7 +48,12 @@ func _run_all():
 	_bench_has_component()
 	_bench_remove_component()
 	_bench_execute_pipeline()
+	_bench_execute_pipeline_medium()
+	_bench_execute_pipeline_complex()
 	_bench_execute_global_pipeline()
+	_bench_execute_global_pipeline_medium()
+	_bench_execute_global_pipeline_complex()
+	_bench_get_matching_nodes()
 
 # -- individual benchmarks --
 
@@ -112,6 +122,87 @@ func _bench_execute_global_pipeline():
 	, 10)
 	_cleanup_nodes(nodes)
 
+func _bench_execute_pipeline_medium():
+	Deus.register_pipeline(BenchPipelineMedium)
+	var nodes = _make_nodes(entity_count)
+	_attach_health_and_damage(nodes)
+	var counter = [0]
+	bench("execute_pipeline_medium(2c3s) x%d" % entity_count, func():
+		Deus.execute_pipeline(BenchPipelineMedium, nodes[counter[0] % entity_count])
+		counter[0] += 1
+	, entity_count)
+	_cleanup_nodes_all(nodes)
+
+func _bench_execute_pipeline_complex():
+	Deus.register_pipeline(BenchPipelineComplex)
+	var nodes = _make_nodes(entity_count)
+	_attach_health_and_damage(nodes)
+	var counter = [0]
+	bench("execute_pipeline_complex(2c5s) x%d" % entity_count, func():
+		Deus.execute_pipeline(BenchPipelineComplex, nodes[counter[0] % entity_count])
+		counter[0] += 1
+	, entity_count)
+	_cleanup_nodes_all(nodes)
+
+func _bench_execute_global_pipeline_medium():
+	Deus.register_pipeline(BenchPipelineMedium)
+	var nodes = _make_nodes(entity_count)
+	_attach_health_and_damage(nodes)
+	bench("execute_global_pipeline_medium(2c3s) x%d" % entity_count, func():
+		Deus.execute_global_pipeline(BenchPipelineMedium)
+	, 10)
+	_cleanup_nodes_all(nodes)
+
+func _bench_execute_global_pipeline_complex():
+	Deus.register_pipeline(BenchPipelineComplex)
+	var nodes = _make_nodes(entity_count)
+	_attach_health_and_damage(nodes)
+	bench("execute_global_pipeline_complex(2c5s) x%d" % entity_count, func():
+		Deus.execute_global_pipeline(BenchPipelineComplex)
+	, 10)
+	_cleanup_nodes_all(nodes)
+
+func _bench_get_matching_nodes():
+	var counts = [100, 1000, 10000]
+	for count in counts:
+		# setup: create nodes with components A+B on all, C on first half
+		var nodes = _make_nodes(count)
+		for node in nodes:
+			Deus.set_component(node, BenchCompA, BenchCompA.new())
+			Deus.set_component(node, BenchCompB, BenchCompB.new())
+		for i in range(count / 2):
+			Deus.set_component(nodes[i], BenchCompC, BenchCompC.new())
+
+		var reg = Deus.component_registry
+		# scale iterations down for larger entity counts to keep runtime bounded
+		var iters = max(10, 1000 / max(1, count / 100))
+
+		# 1-filter: require A (matches all nodes)
+		bench("get_matching_nodes 1req x%d" % count, func():
+			reg._invalidate_matching_cache()
+			reg.get_matching_nodes([BenchCompA], [])
+		, iters)
+
+		# 2-filter: require A+B (matches all nodes)
+		bench("get_matching_nodes 2req x%d" % count, func():
+			reg._invalidate_matching_cache()
+			reg.get_matching_nodes([BenchCompA, BenchCompB], [])
+		, iters)
+
+		# 1-filter + exclude: require A, exclude C (matches second half)
+		bench("get_matching_nodes 1req+1exc x%d" % count, func():
+			reg._invalidate_matching_cache()
+			reg.get_matching_nodes([BenchCompA], [BenchCompC])
+		, iters)
+
+		# cached: require A+B, no invalidation between calls
+		reg._invalidate_matching_cache()
+		bench("get_matching_nodes cached x%d" % count, func():
+			reg.get_matching_nodes([BenchCompA, BenchCompB], [])
+		, iters * 10)
+
+		_cleanup_nodes_all(nodes)
+
 # -- helpers --
 
 func _make_nodes(count: int) -> Array:
@@ -126,10 +217,24 @@ func _attach_health(nodes: Array):
 		h.value = 100
 		Deus.set_component(node, Health, h)
 
+func _attach_health_and_damage(nodes: Array):
+	for node in nodes:
+		var h = Health.new()
+		h.value = 100
+		Deus.set_component(node, Health, h)
+		var d = Damage.new()
+		d.value = 10
+		Deus.set_component(node, Damage, d)
+
 func _cleanup_nodes(nodes: Array):
 	for node in nodes:
 		if Deus.has_component(node, Health):
 			Deus.remove_component(node, Health)
+		node.free()
+
+func _cleanup_nodes_all(nodes: Array):
+	for node in nodes:
+		Deus.component_registry.remove_all_components(node)
 		node.free()
 
 func _print_report():
