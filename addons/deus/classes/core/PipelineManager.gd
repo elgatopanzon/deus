@@ -23,6 +23,10 @@ var pipelines = {}
 # dictionary to hold result handlers for pipelines
 var pipeline_result_handlers = {}
 
+# pre-resolved Script -> pipeline data cache for injected pipelines
+# avoids get_global_name() + dictionary lookups in the hot path
+var _resolved_injections: Dictionary = {}
+
 # pool of reusable PipelineContext objects to avoid per-run allocation
 var _context_pool: Array = []
 
@@ -107,6 +111,9 @@ func register_pipeline(pipeline_class: Script) -> void:
 		"exclude_nodes": components["exclude_nodes"].duplicate(),
 	}
 
+	# cache Script -> data for injection pre-resolution
+	_resolved_injections[pipeline_class] = pipelines[name]
+
 	pipeline_registered.emit(pipeline_class, pipelines[name])
 
 # injects a function or pipeline before/after a target stage
@@ -140,6 +147,7 @@ func deregister_pipeline(pipeline_class: Script) -> void:
 	if pipelines.has(name):
 		pipelines.erase(name)
 		pipeline_result_handlers.erase(name)
+		_resolved_injections.erase(pipeline_class)
 
 		pipeline_deregistered.emit(pipeline_class)
 
@@ -198,6 +206,7 @@ func _commit_buffered_components(context: PipelineContext, node: Node):
 		registry.set_component(node, key, context.components[key])
 
 # calls function or runs pipeline during stage execution
+# uses _resolved_injections cache to skip get_global_name() and dict lookups
 func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineContext) -> void:
 	if typeof(stage_or_pipeline) == TYPE_CALLABLE:
 		var res = stage_or_pipeline.call(context)
@@ -205,14 +214,13 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 			context.result.cancel("stage %s returned false" % stage_or_pipeline.get_method())
 
 	elif typeof(stage_or_pipeline) == TYPE_OBJECT and stage_or_pipeline is Script:
-		var pipeline_name = stage_or_pipeline.get_global_name()
-		if not pipelines.has(pipeline_name):
+		var data = _resolved_injections.get(stage_or_pipeline)
+		if data == null:
 			return
-		var data = pipelines[pipeline_name]
 		if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
 			context.result.noop("Components or nodes missing/excluded")
 			return
-		var sub_result = self.run(stage_or_pipeline, node, context.payload, context)
+		var sub_result = self.run(stage_or_pipeline, node, context.payload, context, data)
 		if sub_result.result.state != PipelineResult.SUCCESS:
 			context.result = sub_result.result
 			return
@@ -273,16 +281,20 @@ func _run_result_handlers(pipeline_class: Script, node: Node, context: PipelineC
 				self.run(handler.handler_pipeline, node, context.payload, context)
 
 # main pipeline run logic
-func run(pipeline_class: Script, node: Node, payload = null, context_override = null) -> Dictionary:
-	var pipeline_name = pipeline_class.get_global_name()
-	if not pipelines.has(pipeline_name):
-		return {"context": null, "result": PipelineResult.new()}
-	var data = pipelines[pipeline_name]
-	if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
-		var result_fail = PipelineResult.new()
-		result_fail.noop("Components or nodes missing/excluded")
-		_run_result_handlers(pipeline_class, node, null, result_fail.state)
-		return {"context": null, "result": result_fail}
+# _data_override skips get_global_name() + dict lookup when caller already has data;
+# when set, component matching was already verified by the caller
+func run(pipeline_class: Script, node: Node, payload = null, context_override = null, _data_override = null) -> Dictionary:
+	var data = _data_override
+	if data == null:
+		var pipeline_name = pipeline_class.get_global_name()
+		if not pipelines.has(pipeline_name):
+			return {"context": null, "result": PipelineResult.new()}
+		data = pipelines[pipeline_name]
+		if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
+			var result_fail = PipelineResult.new()
+			result_fail.noop("Components or nodes missing/excluded")
+			_run_result_handlers(pipeline_class, node, null, result_fail.state)
+			return {"context": null, "result": result_fail}
 
 	pipeline_executing.emit(pipeline_class, node, payload)
 
