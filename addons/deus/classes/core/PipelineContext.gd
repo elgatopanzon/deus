@@ -88,11 +88,10 @@ var node_property_cache
 var _property_dict = {}
 
 func _init():
+	result = PipelineResult.new()
 	node_property_cache = NodePropertyCache.new(_node)
 
 func _get(property):
-	node_property_cache._node = _node
-
 	# check property on the backing dictionary first
 	if _property_dict.has(property):
 		return _property_dict[property]
