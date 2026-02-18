@@ -260,6 +260,7 @@ func _create_context_from_node(node: Node, components: Array) -> PipelineContext
 	context.payload = null
 	context.result.reset()
 	context._node = node
+	context.node_property_cache._node = node
 	return context
 
 # attach a handler pipeline for particular result states in a parent pipeline
@@ -353,7 +354,7 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 	return {"context": context, "result": context.result}
 
 # batch-execute a pipeline over multiple pre-matched nodes
-# reuses a single context across all entities to avoid per-entity allocation.
+# creates a fresh context per entity so lambda captures on context.world remain valid after the loop.
 # returns node -> PipelineResult matching the single-node run() contract.
 func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload = null) -> Dictionary:
 	var registry = _world.component_registry
@@ -362,11 +363,10 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 	var stages = data["stages"]
 	var is_oneshot = data.get("oneshot", null)
 
-	var context := _acquire_context()
-	context.world = _world
-
 	var node_results = {}
 	for node in nodes:
+		var context := PipelineContext.new()
+		context.world = _world
 		# populate context for this entity (inline _create_context_from_node)
 		var entity_id = registry._ensure_entity_id(node)
 		for comp in all_comps:
@@ -375,8 +375,8 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 			if comp_value != null:
 				context.components[comp_name] = comp_value
 		context.payload = payload
-		context.result.reset()
 		context._node = node
+		context.node_property_cache._node = node
 
 		pipeline_executing.emit(pipeline_class, node, payload)
 
@@ -405,19 +405,6 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 
 		pipeline_executed.emit(pipeline_class, node, payload, context.result)
 
-		# snapshot result into a lightweight PipelineResult before context reuse
-		var res = PipelineResult.new()
-		res.state = context.result.state
-		res.error_code = context.result.error_code
-		res.error_message = context.result.error_message
-		node_results[node] = res
-
-		# reset context for next entity
-		context.components.clear()
-		context.node_property_cache.reset()
-		context._property_dict.clear()
-
-	# return context to pool since no caller holds a reference
-	_release_context(context)
+		node_results[node] = context.result
 
 	return node_results
