@@ -73,6 +73,11 @@ class NodePropertyCache:
 				_node.set(prop, _cache[prop]["value"])
 				_cache[prop]["_dirty"] = false
 
+	func reset():
+		_node = null
+		_cache.clear()
+		_child_node_caches.clear()
+
 var _node
 var world
 var components = {}
@@ -103,6 +108,16 @@ func _set(property, value):
 	# set property to the backing dictionary 
 	_property_dict[property] = value
 	return true
+
+func reset():
+	_node = null
+	world = null
+	components.clear()
+	payload = null
+	# result is NOT reset here -- callers may still hold a reference to it
+	# from the return dict. It gets reset on next acquire in _create_context_from_node.
+	node_property_cache.reset()
+	_property_dict.clear()
 
 func _commit_node_properties():
 	node_property_cache.commit()

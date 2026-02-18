@@ -23,6 +23,9 @@ var pipelines = {}
 # dictionary to hold result handlers for pipelines
 var pipeline_result_handlers = {}
 
+# pool of reusable PipelineContext objects to avoid per-run allocation
+var _context_pool: Array = []
+
 var _world: DeusWorld
 
 func _init(world: DeusWorld):
@@ -213,16 +216,28 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 		for key in sub_result.context.components.keys():
 			context.components[key] = sub_result.context.components[key]
 
+# acquires a PipelineContext from the pool or creates a new one
+func _acquire_context() -> PipelineContext:
+	if _context_pool.size() > 0:
+		return _context_pool.pop_back()
+	var ctx = PipelineContext.new()
+	ctx.result = PipelineResult.new()
+	return ctx
+
+# returns a PipelineContext to the pool for reuse
+func _release_context(context: PipelineContext) -> void:
+	context.reset()
+	_context_pool.push_back(context)
+
 # creates processing context for a node and its components
 func _create_context_from_node(node: Node, components: Array) -> PipelineContext:
-	var context := PipelineContext.new()
+	var context := _acquire_context()
 	context.world = _world
 	for comp in components:
 		var comp_value = _world.component_registry.get_component(node, comp.get_global_name())
 		if comp_value != null:
 			context.components[comp.get_global_name()] = comp_value
 	context.payload = null
-	context.result = PipelineResult.new()
 	context.result.reset()
 	context._node = node
 	return context
@@ -296,4 +311,7 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 
 	pipeline_executed.emit(pipeline_class, node, payload, context.result)
 
-	return {"context": context, "result": context.result}
+	var run_result = {"context": context, "result": context.result}
+	if is_root_pipeline:
+		_release_context(context)
+	return run_result
