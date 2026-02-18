@@ -311,7 +311,10 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 
 	pipeline_executed.emit(pipeline_class, node, payload, context.result)
 
-	var run_result = {"context": context, "result": context.result}
-	if is_root_pipeline:
-		_release_context(context)
-	return run_result
+	# Note: we do NOT release the context to the pool here. The caller holds a
+	# reference to the returned context and may access its components/properties.
+	# Releasing would reset the context while the caller still holds it, causing
+	# nil access errors. Root pipeline contexts are not pooled; only sub-contexts
+	# created during nested pipeline runs (which never escape the run() call)
+	# would benefit from pooling, but that requires a different pattern.
+	return {"context": context, "result": context.result}
