@@ -208,6 +208,8 @@ func _commit_buffered_components(context: PipelineContext, node: Node):
 		var current = ss.get_value(entity_id) if ss != null else null
 		if current != null and registry._deep_compare_component(current, context.components[key]):
 			continue
+		# mark dirty so _update_existing_component skips redundant deep compare
+		context.components[key]._dirty = true
 		registry.set_component(node, key, context.components[key])
 
 # calls function or runs pipeline during stage execution

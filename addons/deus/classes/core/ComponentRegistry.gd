@@ -88,16 +88,21 @@ func _add_new_component(node: Node, entity_id: int, component_name: String, comp
 	component_added.emit(node, entity_id, component_name, component)
 
 # updates an existing component if there are changes, and emits signal if necessary
+# skips expensive _deep_compare_component when component._dirty is already set
 func _update_existing_component(node: Node, entity_id: int, component_name: String, component: DefaultComponent) -> void:
+	if component._dirty:
+		component_set.emit(node, entity_id, component_name, component)
+		return
 	var components = _get_sparse_set(component_name)
 	var existing_component = components.get_value(entity_id)
 	if not _deep_compare_component(existing_component, component):
 		component_set.emit(node, entity_id, component_name, component)
 
-# adds the component to the sparse set
+# adds the component to the sparse set and resets dirty flag
 func _add_component_to_sparse_set(entity_id: int, component_name: String, component: DefaultComponent) -> void:
 	var components = _get_sparse_set(component_name)
 	components.add(entity_id, component)
+	component._dirty = false
 
 # returns cached list of script-variable property names for a Resource class
 func _get_script_properties(res: Resource) -> Array:

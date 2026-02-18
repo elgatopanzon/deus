@@ -9,3 +9,6 @@
 
 class_name DefaultComponent
 extends Resource
+
+# dirty flag -- true when component has been confirmed modified since last commit
+var _dirty: bool = false
