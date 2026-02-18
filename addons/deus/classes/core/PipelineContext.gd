@@ -100,6 +100,13 @@ func _init():
 	node_property_cache = NodePropertyCache.new(null)
 
 func _get(property):
+	# ReadOnly prefix: return original component ref without cloning.
+	# This is a foot-gun by design -- mutations go straight to the registry.
+	if property is StringName and property.begins_with(&"ReadOnly"):
+		var real_name = property.substr(8)
+		if original_components.has(real_name):
+			return original_components[real_name]
+		return null
 	# check property on the backing dictionary first
 	if _property_dict.has(property):
 		return _property_dict[property]

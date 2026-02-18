@@ -65,6 +65,40 @@ func _ready():
 	assert(Deus.has_component(Deus, Health) == false, "Singleton health removal failed")
 	print("Singleton health removal passed")
 
+	# ReadOnly prefix tests: verify zero-copy access via context
+	var ro_node = StaticBody2D.new()
+	var ro_health = Health.new()
+	ro_health.value = 500
+	var ro_damage = Damage.new()
+	ro_damage.value = 25
+	Deus.set_component(ro_node, Health, ro_health)
+	Deus.set_component(ro_node, Damage, ro_damage)
+
+	var ro_ctx = PipelineContext.new()
+	ro_ctx._node = ro_node
+	var ro_entity_id = Deus.component_registry._ensure_entity_id(ro_node)
+	var ro_health_ref = Deus.component_registry.get_component_ref(ro_entity_id, "Health")
+	var ro_damage_ref = Deus.component_registry.get_component_ref(ro_entity_id, "Damage")
+	ro_ctx.original_components["Health"] = ro_health_ref
+	ro_ctx.original_components["Damage"] = ro_damage_ref
+
+	# ReadOnly returns same object as registry original
+	assert(ro_ctx.ReadOnlyHealth == ro_health_ref, "ReadOnlyHealth should be same object as registry ref")
+	assert(ro_ctx.ReadOnlyDamage == ro_damage_ref, "ReadOnlyDamage should be same object as registry ref")
+
+	# ReadOnly and normal access are different objects (normal triggers clone)
+	var cloned_health = ro_ctx.Health
+	assert(cloned_health != ro_health_ref, "context.Health should be a clone, not the original ref")
+	assert(cloned_health.value == ro_health_ref.value, "cloned Health value should match original")
+
+	# mutating ReadOnly ref affects registry original (foot-gun by design)
+	ro_ctx.ReadOnlyDamage.value = 999
+	assert(ro_damage_ref.value == 999, "ReadOnly mutation should affect registry original")
+
+	Deus.remove_component(ro_node, Health)
+	Deus.remove_component(ro_node, Damage)
+	print("ReadOnly prefix tests passed")
+
 	Deus.RigidBody2D.queue_free()
 
 	print(Deus.get_resource(Deus.Button, "test_resource"))
