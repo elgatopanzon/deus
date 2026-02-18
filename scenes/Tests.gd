@@ -99,6 +99,70 @@ func _ready():
 	Deus.remove_component(ro_node, Damage)
 	print("ReadOnly prefix tests passed")
 
+	# Skip-commit tests: verify has_pending_writes() and commit gating
+	var sc_node = StaticBody2D.new()
+	var sc_area = Area2D.new()
+	sc_area.name = "Area"
+	sc_node.add_child(sc_area)
+	var sc_health = Health.new()
+	sc_health.value = 100
+	var sc_damage = Damage.new()
+	sc_damage.value = 10
+	Deus.set_component(sc_node, Health, sc_health)
+	Deus.set_component(sc_node, Damage, sc_damage)
+
+	# Test 1: ReadOnly-only access -- no pending writes
+	var sc_ctx1 = PipelineContext.new()
+	sc_ctx1._node = sc_node
+	var sc_eid = Deus.component_registry._ensure_entity_id(sc_node)
+	sc_ctx1.original_components["Health"] = Deus.component_registry.get_component_ref(sc_eid, "Health")
+	sc_ctx1.original_components["Damage"] = Deus.component_registry.get_component_ref(sc_eid, "Damage")
+	# access via ReadOnly only
+	var _ro_h = sc_ctx1.ReadOnlyHealth
+	var _ro_d = sc_ctx1.ReadOnlyDamage
+	assert(sc_ctx1.has_pending_writes() == false, "ReadOnly-only context should have no pending writes")
+	assert(sc_ctx1.components.size() == 0, "ReadOnly-only context should have empty components dict")
+	print("Skip-commit test 1 passed: ReadOnly-only access has no pending writes")
+
+	# Test 2: Normal access -- has pending writes
+	var sc_ctx2 = PipelineContext.new()
+	sc_ctx2._node = sc_node
+	sc_ctx2.original_components["Health"] = Deus.component_registry.get_component_ref(sc_eid, "Health")
+	sc_ctx2.original_components["Damage"] = Deus.component_registry.get_component_ref(sc_eid, "Damage")
+	# access Health normally (triggers clone)
+	var _rw_h = sc_ctx2.Health
+	assert(sc_ctx2.has_pending_writes() == true, "Normal-access context should have pending writes")
+	assert(sc_ctx2.components.size() == 1, "Normal-access context should have 1 cloned component")
+	assert(sc_ctx2.components.has("Health"), "Cloned component should be Health")
+	print("Skip-commit test 2 passed: normal access triggers pending writes")
+
+	# Test 3: Mixed access -- only normal-accessed components in cloned dict
+	var sc_ctx3 = PipelineContext.new()
+	sc_ctx3._node = sc_node
+	sc_ctx3.original_components["Health"] = Deus.component_registry.get_component_ref(sc_eid, "Health")
+	sc_ctx3.original_components["Damage"] = Deus.component_registry.get_component_ref(sc_eid, "Damage")
+	# ReadOnly for Health, normal for Damage
+	var _ro_h2 = sc_ctx3.ReadOnlyHealth
+	var _rw_d = sc_ctx3.Damage
+	assert(sc_ctx3.has_pending_writes() == true, "Mixed context should have pending writes")
+	assert(sc_ctx3.components.size() == 1, "Mixed context should have 1 cloned component (Damage only)")
+	assert(sc_ctx3.components.has("Damage"), "Cloned component should be Damage (the normal-accessed one)")
+	assert(not sc_ctx3.components.has("Health"), "Health should not be cloned (ReadOnly access)")
+	print("Skip-commit test 3 passed: mixed access only clones normal-accessed components")
+
+	# Test 4: Full pipeline run -- ReadOnly-only pipeline does not modify registry
+	var sc_health_before = Deus.get_component(sc_node, Health).value
+	# run DamagePipeline which modifies components normally
+	var _sc_result = Deus.execute_pipeline(DamagePipeline, sc_node)
+	var sc_health_after = Deus.get_component(sc_node, Health).value
+	assert(sc_health_after != sc_health_before, "DamagePipeline should modify Health via commit")
+	print("Skip-commit test 4 passed: normal pipeline commits correctly")
+
+	Deus.remove_component(sc_node, Health)
+	Deus.remove_component(sc_node, Damage)
+	sc_node.free()
+	print("All skip-commit tests passed")
+
 	Deus.RigidBody2D.queue_free()
 
 	print(Deus.get_resource(Deus.Button, "test_resource"))
