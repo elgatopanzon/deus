@@ -129,9 +129,18 @@ func remove_component(node: Node, component_name: String) -> void:
 			component_removed_all.emit(node, entity_id, component_name)
 
 func remove_all_components(node: Node) -> void:
-	if node_components.has(node):
-		for component_name in node_components[node]:
-			remove_component(node, component_name)
+	if not node_components.has(node):
+		return
+	var entity_id = _ensure_entity_id(node)
+	var comp_names = node_components[node].duplicate()
+	for component_name in comp_names:
+		var components = _get_sparse_set(component_name)
+		components.erase(entity_id)
+		component_removed.emit(node, entity_id, component_name)
+	node_components.erase(node)
+	_invalidate_matching_cache()
+	if comp_names.size() > 0:
+		component_removed_all.emit(node, entity_id, comp_names[-1])
 
 func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 	if requires.size() > 0:
