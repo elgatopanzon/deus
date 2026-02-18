@@ -144,11 +144,15 @@ func execute_global_pipeline(pipeline_class: Script, payload = null, context_ove
 	var requires = pipeline_info["requires"]
 	var exclude = pipeline_info["exclude"]
 	var nodes = component_registry.get_matching_nodes(requires, exclude)
-	var node_results = {}
-	for node in nodes:
-		var ret = pipeline_manager.run(pipeline_class, node, payload, context_override)
-		node_results[node] = ret.result
-	return node_results
+	# context_override forces per-entity run() path (shared context from caller)
+	if context_override != null:
+		var node_results = {}
+		for node in nodes:
+			var ret = pipeline_manager.run(pipeline_class, node, payload, context_override, pipeline_info)
+			node_results[node] = ret.result
+		return node_results
+	# batch path: reuses a single context across all entities
+	return pipeline_manager.run_batch(pipeline_class, nodes, pipeline_info, payload)
 
 func signal_to_pipeline(connect_node, signal_name: String, target_node, pipeline_class: Script, flags: int = 0) -> void:
 	register_pipeline(pipeline_class)

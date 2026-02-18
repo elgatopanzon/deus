@@ -351,3 +351,73 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 	# created during nested pipeline runs (which never escape the run() call)
 	# would benefit from pooling, but that requires a different pattern.
 	return {"context": context, "result": context.result}
+
+# batch-execute a pipeline over multiple pre-matched nodes
+# reuses a single context across all entities to avoid per-entity allocation.
+# returns node -> PipelineResult matching the single-node run() contract.
+func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload = null) -> Dictionary:
+	var registry = _world.component_registry
+	var all_comps = data["requires"] + data["optional"]
+	var stage_keys = data["_stage_keys"]
+	var stages = data["stages"]
+	var is_oneshot = data.get("oneshot", null)
+
+	var context := _acquire_context()
+	context.world = _world
+
+	var node_results = {}
+	for node in nodes:
+		# populate context for this entity (inline _create_context_from_node)
+		var entity_id = registry._ensure_entity_id(node)
+		for comp in all_comps:
+			var comp_name = comp.get_global_name()
+			var comp_value = registry.get_component_direct(entity_id, comp_name)
+			if comp_value != null:
+				context.components[comp_name] = comp_value
+		context.payload = payload
+		context.result.reset()
+		context._node = node
+
+		pipeline_executing.emit(pipeline_class, node, payload)
+
+		# stage execution loop
+		for stage in stage_keys:
+			if context.result.state != PipelineResult.SUCCESS:
+				break
+			for fn_or_pipe in stages[stage]:
+				_call_stage_or_pipeline(fn_or_pipe, node, context)
+				if context.result.state != PipelineResult.SUCCESS:
+					break
+			if context.result.state != PipelineResult.SUCCESS:
+				break
+
+		# commit buffered components on success
+		if context.result.state == PipelineResult.SUCCESS:
+			_commit_buffered_components(context, node)
+			context._commit_node_properties()
+
+		# oneshot deregistration
+		if is_oneshot and (context.result.state in is_oneshot or is_oneshot.size() == 0):
+			deregister_pipeline(pipeline_class)
+			context.result.deregistered()
+
+		_run_result_handlers(pipeline_class, node, context, context.result.state)
+
+		pipeline_executed.emit(pipeline_class, node, payload, context.result)
+
+		# snapshot result into a lightweight PipelineResult before context reuse
+		var res = PipelineResult.new()
+		res.state = context.result.state
+		res.error_code = context.result.error_code
+		res.error_message = context.result.error_message
+		node_results[node] = res
+
+		# reset context for next entity
+		context.components.clear()
+		context.node_property_cache.reset()
+		context._property_dict.clear()
+
+	# return context to pool since no caller holds a reference
+	_release_context(context)
+
+	return node_results
