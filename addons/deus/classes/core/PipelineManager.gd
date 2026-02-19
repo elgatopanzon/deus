@@ -34,6 +34,9 @@ var _resolved_result_handlers: Dictionary = {}
 # pool of reusable PipelineContext objects to avoid per-run allocation
 var _context_pool: Array = []
 
+# pool of reusable PipelineResult objects to avoid per-run allocation
+var _result_pool: Array = []
+
 var _world: DeusWorld
 
 func _init(world: DeusWorld):
@@ -234,16 +237,31 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 		for key in sub_result.context.components.keys():
 			context.components[key] = sub_result.context.components[key]
 
+# acquires a PipelineResult from the pool or creates a new one
+func _acquire_result() -> PipelineResult:
+	if _result_pool.size() > 0:
+		var r = _result_pool.pop_back()
+		r.reset()
+		return r
+	return PipelineResult.new()
+
+# returns a PipelineResult to the pool for reuse
+func _release_result(r: PipelineResult) -> void:
+	r.reset()
+	_result_pool.push_back(r)
+
 # acquires a PipelineContext from the pool or creates a new one
 # always provides a fresh PipelineResult so callers holding the old one are unaffected
 func _acquire_context() -> PipelineContext:
 	if _context_pool.size() > 0:
 		var ctx = _context_pool.pop_back()
-		ctx.result = PipelineResult.new()
+		ctx.result = _acquire_result()
 		return ctx
 	return PipelineContext.new()
 
 # returns a PipelineContext to the pool for reuse
+# result is NOT released here -- callers snapshot context.result before release,
+# so the result must stay valid. Results are released separately.
 func _release_context(context: PipelineContext) -> void:
 	context.reset()
 	_context_pool.push_back(context)
@@ -305,10 +323,10 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 	if data == null:
 		var pipeline_name = pipeline_class.get_global_name()
 		if not pipelines.has(pipeline_name):
-			return {"context": null, "result": PipelineResult.new()}
+			return {"context": null, "result": _acquire_result()}
 		data = pipelines[pipeline_name]
 		if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
-			var result_fail = PipelineResult.new()
+			var result_fail = _acquire_result()
 			result_fail.noop("Components or nodes missing/excluded")
 			_run_result_handlers(pipeline_class, node, null, result_fail.state)
 			return {"context": null, "result": result_fail}

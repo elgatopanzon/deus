@@ -99,6 +99,34 @@ func _ready():
 	Deus.remove_component(ro_node, Damage)
 	print("ReadOnly prefix tests passed")
 
+	# get_component_fast tests: direct registry access bypassing pipeline
+	var fast_node = StaticBody2D.new()
+	var fast_health = Health.new()
+	fast_health.value = 777
+	Deus.set_component(fast_node, Health, fast_health)
+
+	# returns original ref (same object as registry holds)
+	var fast_ref = Deus.get_component_fast(fast_node, Health)
+	assert(fast_ref != null, "get_component_fast should return component")
+	assert(fast_ref.value == 777, "get_component_fast value should match: expected 777, got %d" % fast_ref.value)
+	var fast_eid = Deus.component_registry._ensure_entity_id(fast_node)
+	var fast_reg_ref = Deus.component_registry.get_component_ref(fast_eid, "Health")
+	assert(fast_ref == fast_reg_ref, "get_component_fast should return same object as registry ref")
+
+	# mutation via fast ref affects registry (no clone)
+	fast_ref.value = 888
+	assert(Deus.component_registry.get_component_ref(fast_eid, "Health").value == 888, "fast ref mutation should affect registry")
+
+	# missing component returns null
+	assert(Deus.get_component_fast(fast_node, Damage) == null, "get_component_fast for missing component should return null")
+
+	# node with no entity_id returns null
+	var no_eid_node = StaticBody2D.new()
+	assert(Deus.get_component_fast(no_eid_node, Health) == null, "get_component_fast on node without entity_id should return null")
+
+	Deus.remove_component(fast_node, Health)
+	print("get_component_fast tests passed")
+
 	# Skip-commit tests: verify has_pending_writes() and commit gating
 	var sc_node = StaticBody2D.new()
 	var sc_area = Area2D.new()

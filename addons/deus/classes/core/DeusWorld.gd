@@ -92,6 +92,12 @@ func set_component(node: Node, component_class: Script, component: DefaultCompon
 func get_component(node: Node, component_class: Script) -> DefaultComponent:
 	return component_registry.get_component(node, component_class.get_global_name())
 
+# direct registry access bypassing GetComponentPipeline; returns original ref (no clone)
+func get_component_fast(node: Node, component_class: Script) -> DefaultComponent:
+	if not node.has_meta("entity_id"):
+		return null
+	return component_registry.get_component_ref(node.get_meta("entity_id"), component_class.get_global_name())
+
 func has_component(node: Node, component_class: Script) -> bool:
 	return component_registry.has_component(node, component_class.get_global_name())
 

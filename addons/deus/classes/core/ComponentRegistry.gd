@@ -152,7 +152,7 @@ func get_component_direct(entity_id: int, component_name: String) -> DefaultComp
 	var val = ss.get_value(entity_id)
 	if val == null:
 		return null
-	return val.duplicate(true)
+	return val.smart_duplicate()
 
 # returns the original component ref without cloning, for lazy-clone context population
 func get_component_ref(entity_id: int, component_name: String) -> DefaultComponent:

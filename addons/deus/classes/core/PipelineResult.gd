@@ -23,6 +23,7 @@ func reset():
 	state = SUCCESS
 	error_code = 0
 	error_message = ""
+	value = null
 
 func noop(msg = ""):
 	state = CANCELLED

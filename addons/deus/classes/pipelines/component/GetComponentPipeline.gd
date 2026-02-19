@@ -16,4 +16,4 @@ static func _stage_get(ctx):
 	if component == null:
 		ctx.result.noop("component not found")
 		return
-	ctx.result.value = component.duplicate(true)
+	ctx.result.value = component.smart_duplicate()

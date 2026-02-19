@@ -117,7 +117,7 @@ func _get(property):
 		return components[property]
 	# lazy clone: component exists in originals but hasn't been cloned yet
 	elif original_components.has(property):
-		var clone = original_components[property].duplicate(true)
+		var clone = original_components[property].smart_duplicate()
 		components[property] = clone
 		return clone
 	else:
