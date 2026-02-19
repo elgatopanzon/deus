@@ -203,7 +203,7 @@ var inv = Deus.get_resource(my_node, "inventory")
 - [x] Pipeline injection with runtime overrides
 - [x] Node and resource registries
 
-### Phase 2: Post-Launch
+### Phase 2: Post-Launch - [x] Performance Optimization
 - [ ] Entity and component serialisation
 - [x] Breakout demo project - [deus-breakout](https://github.com/elgatopanzon/deus-breakout)
 - [ ] GUI application demo project
