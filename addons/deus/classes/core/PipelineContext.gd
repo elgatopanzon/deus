@@ -92,6 +92,8 @@ var result
 # components is populated lazily on first access with cloned copies
 var original_components = {}
 
+var _entity_id: int = -1
+
 var node_property_cache
 var _property_dict = {}
 
@@ -129,6 +131,7 @@ func _set(property, value):
 func reset():
 	_node = null
 	world = null
+	_entity_id = -1
 	components.clear()
 	original_components.clear()
 	payload = null

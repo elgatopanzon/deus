@@ -204,7 +204,7 @@ func _nodes_match(node: Node, require: Array, exclude: Array) -> bool:
 # Uses direct SparseSet access to avoid _get_sparse_set dictionary lookup per key
 func _commit_buffered_components(context: PipelineContext, node: Node):
 	var registry = _world.component_registry
-	var entity_id = registry._ensure_entity_id(node)
+	var entity_id = context._entity_id
 	var comp_sets = registry.component_sets
 	for key in context.components.keys():
 		var ss = comp_sets.get(key)
@@ -273,6 +273,7 @@ func _create_context_from_node(node: Node, components: Array) -> PipelineContext
 	context.world = _world
 	var registry = _world.component_registry
 	var entity_id = registry._ensure_entity_id(node)
+	context._entity_id = entity_id
 	for comp in components:
 		var comp_name = comp.get_global_name()
 		var comp_value = registry.get_component_ref(entity_id, comp_name)
@@ -391,6 +392,7 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 		# populate context for this entity (inline _create_context_from_node)
 		# stores original refs without cloning; clones happen lazily on first access
 		var entity_id = registry._ensure_entity_id(node)
+		context._entity_id = entity_id
 		for comp in all_comps:
 			var comp_name = comp.get_global_name()
 			var comp_value = registry.get_component_ref(entity_id, comp_name)
