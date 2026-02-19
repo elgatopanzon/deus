@@ -41,6 +41,10 @@ Godot's node/scene tree works well for most games, but falls short when you need
 
 The `Deus` autoload singleton is the single entry point for all operations. User code always goes through `Deus.*` methods; internal registries and managers are not accessed directly.
 
+### Performance
+
+Deus is optimized for frame-critical code. Recent optimizations achieved ~12.8% total frame time savings through: fast-path component access bypassing write buffers (F1), optimized PipelineContext dictionary lookups (F2), PipelineResult object pooling (F3), entity ID caching in context (F4), and shallow duplication for flat component structures (F7). The pipeline scheduler uses archetype bitset filtering for O(1) entity matching, context pooling to reduce allocation pressure in tight loops, and automatic skip-commit when no components are modified.
+
 ## Examples
 
 ### Components and pipelines
@@ -151,6 +155,18 @@ Deus.pipeline_scheduler.register_task(PipelineSchedulerDefaults.OnUpdate, Import
 
 All registration and deregistration is deferred - changes are queued and processed each frame. Deregistrations process before registrations to prevent conflicts.
 
+### Advanced optimization patterns
+
+For read-heavy pipelines, use ReadOnly component access to bypass write buffers:
+
+```gdscript
+static func _stage_render(context):
+    # ReadOnly bypasses clone and write buffer, returning original ref
+    var health_display = context.ReadOnlyHealth.value
+```
+
+The pipeline context pools objects across frames to reduce allocation pressure. Pipelines that don't modify any components automatically skip the commit phase, avoiding registry lookups and signal emissions. Use archetype bitset filtering for O(1) entity matching across large component sets.
+
 ### Node and resource registries
 
 The node registry auto-tracks all nodes in the scene tree and provides multiple lookup methods.
@@ -203,7 +219,15 @@ MIT
 
 ## Completed Work
 
+### Performance Optimizations (P10)
+- **2026-02-18** - Cache entity_id in PipelineContext (F4: 1.0% frame time savings)
+- **2026-02-18** - Reorder PipelineContext._get dict lookups (F2: 2.0% frame time savings)
+- **2026-02-18** - Add get_component_fast, PipelineResult pooling, shallow duplicate for flat components (F1/F3/F7: 9.3% combined frame time savings)
+
+### Phase 2: Post-Launch
 - **2026-01-31** - Breakout demo project (Godot Deus - P2 Post-Launch)
+
+### Phase 1: MVP
 - **2026-01-10** - Pipeline scheduler with phase groups (Godot Deus - P1 MVP)
 - **2026-01-10** - Pipeline execution with dependency injection and multi-stage support (Godot Deus - P1 MVP)
 - **2026-01-10** - Stable component registry with SparseSet storage (Godot Deus - P1 MVP)
