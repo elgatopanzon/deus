@@ -1,6 +1,6 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://cw27om74t6fel"]
 
-[ext_resource type="Script" path="res://scenes/Benchmark3D.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://b4otes5xkkd05" path="res://scenes/Benchmark3D.gd" id="1_script"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_top_color = Color(0.05, 0.05, 0.1, 1)
@@ -18,18 +18,18 @@ ambient_light_source = 1
 ambient_light_color = Color(0.15, 0.12, 0.2, 1)
 ambient_light_energy = 0.3
 
-[node name="Benchmark3D" type="Node3D"]
+[node name="Benchmark3D" type="Node3D" unique_id=504108688]
 script = ExtResource("1_script")
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1718522846]
 transform = Transform3D(1, 0, 0, 0, 0.939693, 0.34202, 0, -0.34202, 0.939693, 0, 15, 35)
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1279799547]
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 5, 10, 5)
 light_energy = 1.2
 shadow_enabled = true
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1284655141]
 environment = SubResource("Environment_1")
 
-[node name="GridRoot" type="Node3D" parent="."]
+[node name="GridRoot" type="Node3D" parent="." unique_id=173274157]
