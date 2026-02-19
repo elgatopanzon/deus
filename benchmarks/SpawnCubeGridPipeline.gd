@@ -3,9 +3,9 @@
 
 class_name SpawnCubeGridPipeline extends DefaultPipeline
 
-const GridRootComp = preload("res://classes/components/GridRoot.gd")
-const RotationSpeedComp = preload("res://classes/components/RotationSpeed.gd")
-const GridMemberComp = preload("res://classes/components/GridMember.gd")
+const GridRootComp = preload("res://benchmarks/GridRoot.gd")
+const RotationSpeedComp = preload("res://benchmarks/RotationSpeed.gd")
+const GridMemberComp = preload("res://benchmarks/GridMember.gd")
 
 static func _requires(): return [GridRootComp]
 

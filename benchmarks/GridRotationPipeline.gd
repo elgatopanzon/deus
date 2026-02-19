@@ -3,7 +3,7 @@
 
 class_name GridRotationPipeline extends DefaultPipeline
 
-const GridRootComp = preload("res://classes/components/GridRoot.gd")
+const GridRootComp = preload("res://benchmarks/GridRoot.gd")
 
 static func _requires(): return [GridRootComp]
 

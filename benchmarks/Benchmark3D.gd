@@ -3,12 +3,12 @@
 
 extends Node3D
 
-const GridRootComp = preload("res://classes/components/GridRoot.gd")
-const RotationSpeedComp = preload("res://classes/components/RotationSpeed.gd")
-const GridMemberComp = preload("res://classes/components/GridMember.gd")
-const SpawnCubeGrid = preload("res://classes/pipelines/SpawnCubeGridPipeline.gd")
-const CubeRotation = preload("res://classes/pipelines/CubeRotationPipeline.gd")
-const GridRotation = preload("res://classes/pipelines/GridRotationPipeline.gd")
+const GridRootComp = preload("res://benchmarks/GridRoot.gd")
+const RotationSpeedComp = preload("res://benchmarks/RotationSpeed.gd")
+const GridMemberComp = preload("res://benchmarks/GridMember.gd")
+const SpawnCubeGrid = preload("res://benchmarks/SpawnCubeGridPipeline.gd")
+const CubeRotation = preload("res://benchmarks/CubeRotationPipeline.gd")
+const GridRotation = preload("res://benchmarks/GridRotationPipeline.gd")
 
 @onready var grid_root: Node3D = $GridRoot
 

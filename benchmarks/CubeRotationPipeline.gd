@@ -3,8 +3,8 @@
 
 class_name CubeRotationPipeline extends DefaultPipeline
 
-const RotationSpeedComp = preload("res://classes/components/RotationSpeed.gd")
-const GridMemberComp = preload("res://classes/components/GridMember.gd")
+const RotationSpeedComp = preload("res://benchmarks/RotationSpeed.gd")
+const GridMemberComp = preload("res://benchmarks/GridMember.gd")
 
 static func _requires(): return [RotationSpeedComp, GridMemberComp]
 
