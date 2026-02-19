@@ -100,6 +100,14 @@ func _init():
 	node_property_cache = NodePropertyCache.new(null)
 
 func _get(property):
+	# component write buffer hit (2nd+ access) -- hottest path, check first
+	if components.has(property):
+		return components[property]
+	# lazy clone: component in originals but not yet cloned
+	if original_components.has(property):
+		var clone = original_components[property].smart_duplicate()
+		components[property] = clone
+		return clone
 	# ReadOnly prefix: return original component ref without cloning.
 	# This is a foot-gun by design -- mutations go straight to the registry.
 	if property is StringName and property.begins_with(&"ReadOnly"):
@@ -107,21 +115,11 @@ func _get(property):
 		if original_components.has(real_name):
 			return original_components[real_name]
 		return null
-	# check property on the backing dictionary first
+	# backing dictionary for arbitrary properties set via _set
 	if _property_dict.has(property):
 		return _property_dict[property]
-	# root node property main priority
-	elif property in _node:
-		return node_property_cache._get(property)
-	elif components.has(property):
-		return components[property]
-	# lazy clone: component exists in originals but hasn't been cloned yet
-	elif original_components.has(property):
-		var clone = original_components[property].smart_duplicate()
-		components[property] = clone
-		return clone
-	else:
-		return node_property_cache._get(property)
+	# node property or child node resolution
+	return node_property_cache._get(property)
 
 func _set(property, value):
 	# set property to the backing dictionary 
