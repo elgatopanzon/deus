@@ -15,8 +15,6 @@ signal pipeline_deregistered(pipeline_class)
 signal pipeline_injected(pipeline_class, injected_class, injected_stage)
 signal pipeline_result_handler_injected(pipeline_class, injected_class, result_states)
 signal pipeline_uninjected(pipeline_class, injected_class, injected_stage)
-signal pipeline_executing(pipeline_class, target, payload)
-signal pipeline_executed(pipeline_class, target, payload)
 
 var pipelines = {}
 
@@ -332,8 +330,6 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 			_run_result_handlers(pipeline_class, node, null, result_fail.state)
 			return {"context": null, "result": result_fail}
 
-	pipeline_executing.emit(pipeline_class, node, payload)
-
 	var context = context_override
 	var is_root_pipeline = false
 	if context_override == null:
@@ -363,8 +359,6 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 		context.result.deregistered()
 
 	_run_result_handlers(pipeline_class, node, context, context.result.state)
-
-	pipeline_executed.emit(pipeline_class, node, payload, context.result)
 
 	# Note: we do NOT release the context to the pool here. The caller holds a
 	# reference to the returned context and may access its components/properties.
@@ -401,8 +395,6 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 		context.payload = payload
 		context._node = node
 
-		pipeline_executing.emit(pipeline_class, node, payload)
-
 		# stage execution loop
 		for stage in stage_keys:
 			if context.result.state != PipelineResult.SUCCESS:
@@ -425,8 +417,6 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 			context.result.deregistered()
 
 		_run_result_handlers(pipeline_class, node, context, context.result.state)
-
-		pipeline_executed.emit(pipeline_class, node, payload, context.result)
 
 		# snapshot result before releasing context back to pool
 		# _acquire_context gives a fresh PipelineResult so this ref stays valid
