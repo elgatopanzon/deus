@@ -149,7 +149,7 @@ func execute_global_pipeline(pipeline_class: Script, payload = null, context_ove
 		return {}
 	var requires = pipeline_info["requires"]
 	var exclude = pipeline_info["exclude"]
-	var nodes = component_registry.get_matching_nodes(requires, exclude)
+	var nodes = component_registry.get_matching_nodes(requires, exclude, pipeline_info["_query_key_base"])
 	# context_override forces per-entity run() path (shared context from caller)
 	if context_override != null:
 		var node_results = {}

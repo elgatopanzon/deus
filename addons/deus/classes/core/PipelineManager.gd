@@ -118,6 +118,15 @@ func register_pipeline(pipeline_class: Script) -> void:
 		req_mask = _world.component_registry._build_filter_bitmask(components["requires"])
 		exc_mask = _world.component_registry._build_filter_bitmask(components["exclude"])
 
+	# pre-compute query key base for get_matching_nodes cache lookups
+	# format matches the runtime fallback: "ReqA,ReqB,|ExcA,ExcB,"
+	var query_key_base: String = ""
+	for comp in components["requires"]:
+		query_key_base += comp.get_global_name() + ","
+	query_key_base += "|"
+	for comp in components["exclude"]:
+		query_key_base += comp.get_global_name() + ","
+
 	pipelines[name] = {
 		"stages": stage_data,
 		"_stage_keys": stage_data.keys(),
@@ -129,6 +138,7 @@ func register_pipeline(pipeline_class: Script) -> void:
 		"_component_names": comp_names,
 		"_req_mask": req_mask,
 		"_exc_mask": exc_mask,
+		"_query_key_base": query_key_base,
 	}
 
 	# cache Script -> data for injection pre-resolution

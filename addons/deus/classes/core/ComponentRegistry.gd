@@ -227,14 +227,19 @@ func _invalidate_matching_cache() -> void:
 	_filter_bitmask_cache.clear()
 
 # returns a list of nodes that have all required components and none of the excluded components
-func get_matching_nodes(requires: Array, exclude: Array) -> Array:
-	# Build cache key from component names
-	var key = str(_cache_generation) + ":"
-	for r in requires:
-		key += r.get_global_name() + ","
-	key += "|"
-	for e in exclude:
-		key += e.get_global_name() + ","
+# query_key_base is an optional pre-computed key suffix cached at pipeline registration
+func get_matching_nodes(requires: Array, exclude: Array, query_key_base: String = "") -> Array:
+	# Build cache key: use pre-computed base when available, otherwise build from component names
+	var key: String
+	if query_key_base != "":
+		key = str(_cache_generation) + ":" + query_key_base
+	else:
+		key = str(_cache_generation) + ":"
+		for r in requires:
+			key += r.get_global_name() + ","
+		key += "|"
+		for e in exclude:
+			key += e.get_global_name() + ","
 	if _matching_nodes_cache.has(key):
 		return _matching_nodes_cache[key]
 
