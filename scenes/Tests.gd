@@ -149,6 +149,8 @@ func _ready():
 	var _ro_h = sc_ctx1.ReadOnlyHealth
 	var _ro_d = sc_ctx1.ReadOnlyDamage
 	assert(sc_ctx1.has_pending_writes() == false, "ReadOnly-only context should have no pending writes")
+	assert(sc_ctx1.has_pending_component_writes() == false, "ReadOnly-only context should have no pending component writes")
+	assert(sc_ctx1.has_pending_node_writes() == false, "ReadOnly-only context should have no pending node writes")
 	assert(sc_ctx1.components.size() == 0, "ReadOnly-only context should have empty components dict")
 	print("Skip-commit test 1 passed: ReadOnly-only access has no pending writes")
 
@@ -160,6 +162,8 @@ func _ready():
 	# access Health normally (triggers clone)
 	var _rw_h = sc_ctx2.Health
 	assert(sc_ctx2.has_pending_writes() == true, "Normal-access context should have pending writes")
+	assert(sc_ctx2.has_pending_component_writes() == true, "Normal-access context should have pending component writes")
+	assert(sc_ctx2.has_pending_node_writes() == false, "Normal-access context should have no pending node writes")
 	assert(sc_ctx2.components.size() == 1, "Normal-access context should have 1 cloned component")
 	assert(sc_ctx2.components.has("Health"), "Cloned component should be Health")
 	print("Skip-commit test 2 passed: normal access triggers pending writes")

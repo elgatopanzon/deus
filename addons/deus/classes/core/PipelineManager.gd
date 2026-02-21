@@ -371,9 +371,11 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 		if context.result.state != PipelineResult.SUCCESS:
 			break
 
-	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS and context.has_pending_writes():
-		_commit_buffered_components(context, node)
-		context._commit_node_properties()
+	if is_root_pipeline and context.result.state == PipelineResult.SUCCESS:
+		if context.has_pending_component_writes():
+			_commit_buffered_components(context, node)
+		if context.has_pending_node_writes():
+			context._commit_node_properties()
 
 	# handle one-shot pipeline deregistration
 	if data.get("oneshot", null) and (context.result.state in data["oneshot"] or data["oneshot"].size() == 0):
@@ -430,9 +432,11 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 				break
 
 		# commit buffered components on success (skip if no writes occurred)
-		if context.result.state == PipelineResult.SUCCESS and context.has_pending_writes():
-			_commit_buffered_components(context, node)
-			context._commit_node_properties()
+		if context.result.state == PipelineResult.SUCCESS:
+			if context.has_pending_component_writes():
+				_commit_buffered_components(context, node)
+			if context.has_pending_node_writes():
+				context._commit_node_properties()
 
 		# oneshot deregistration
 		if is_oneshot and (context.result.state in is_oneshot or is_oneshot.size() == 0):
