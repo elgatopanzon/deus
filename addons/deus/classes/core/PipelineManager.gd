@@ -112,6 +112,12 @@ func register_pipeline(pipeline_class: Script) -> void:
 	for i in all_comps.size():
 		comp_names[i] = all_comps[i].get_global_name()
 
+	var req_mask: int = 0
+	var exc_mask: int = 0
+	if _world.component_registry != null:
+		req_mask = _world.component_registry._build_filter_bitmask(components["requires"])
+		exc_mask = _world.component_registry._build_filter_bitmask(components["exclude"])
+
 	pipelines[name] = {
 		"stages": stage_data,
 		"_stage_keys": stage_data.keys(),
@@ -121,6 +127,8 @@ func register_pipeline(pipeline_class: Script) -> void:
 		"require_nodes": components["require_nodes"].duplicate(),
 		"exclude_nodes": components["exclude_nodes"].duplicate(),
 		"_component_names": comp_names,
+		"_req_mask": req_mask,
+		"_exc_mask": exc_mask,
 	}
 
 	# cache Script -> data for injection pre-resolution
@@ -232,7 +240,7 @@ func _call_stage_or_pipeline(stage_or_pipeline, node: Node, context: PipelineCon
 		var data = _resolved_injections.get(stage_or_pipeline)
 		if data == null:
 			return
-		if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
+		if not _world.component_registry.components_match_mask(node, data["_req_mask"], data["_exc_mask"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
 			context.result.noop("Components or nodes missing/excluded")
 			return
 		var sub_result = self.run(stage_or_pipeline, node, context.payload, context, data)
@@ -338,7 +346,7 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 		if not pipelines.has(pipeline_name):
 			return {"context": null, "result": _acquire_result()}
 		data = pipelines[pipeline_name]
-		if not _world.component_registry.components_match(node, data["requires"], data["exclude"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
+		if not _world.component_registry.components_match_mask(node, data["_req_mask"], data["_exc_mask"]) or not _nodes_match(node, data["require_nodes"], data["exclude_nodes"]):
 			var result_fail = _acquire_result()
 			result_fail.noop("Components or nodes missing/excluded")
 			_run_result_handlers(pipeline_class, node, null, result_fail.state)

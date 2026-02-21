@@ -215,6 +215,12 @@ func components_match(node: Node, requires: Array, exclude: Array) -> bool:
 	var exc_mask: int = _build_filter_bitmask(exclude)
 	return (entity_mask & req_mask) == req_mask and (entity_mask & exc_mask) == 0
 
+# fast path: accepts pre-computed bitmasks to skip _build_filter_bitmask entirely
+func components_match_mask(node: Node, req_mask: int, exc_mask: int) -> bool:
+	var entity_id = _ensure_entity_id(node)
+	var entity_mask: int = _entity_bitmask.get(entity_id, 0)
+	return (entity_mask & req_mask) == req_mask and (entity_mask & exc_mask) == 0
+
 func _invalidate_matching_cache() -> void:
 	_cache_generation += 1
 	_matching_nodes_cache.clear()
