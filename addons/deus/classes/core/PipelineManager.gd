@@ -106,6 +106,12 @@ func register_pipeline(pipeline_class: Script) -> void:
 
 	var components = _get_pipeline_class_components(pipeline_class)
 	var stage_data = stages.duplicate(true)
+	var all_comps = components["requires"].duplicate() + components["optional"].duplicate()
+	var comp_names: Array[String] = []
+	comp_names.resize(all_comps.size())
+	for i in all_comps.size():
+		comp_names[i] = all_comps[i].get_global_name()
+
 	pipelines[name] = {
 		"stages": stage_data,
 		"_stage_keys": stage_data.keys(),
@@ -114,6 +120,7 @@ func register_pipeline(pipeline_class: Script) -> void:
 		"exclude": components["exclude"].duplicate(),
 		"require_nodes": components["require_nodes"].duplicate(),
 		"exclude_nodes": components["exclude_nodes"].duplicate(),
+		"_component_names": comp_names,
 	}
 
 	# cache Script -> data for injection pre-resolution
@@ -266,17 +273,24 @@ func _release_context(context: PipelineContext) -> void:
 
 # creates processing context for a node and its components
 # stores original refs without cloning; clones happen lazily on first access
-func _create_context_from_node(node: Node, components: Array) -> PipelineContext:
+# comp_names is an optional pre-resolved array of name strings (from _component_names cache)
+func _create_context_from_node(node: Node, components: Array, comp_names: Array = []) -> PipelineContext:
 	var context := _acquire_context()
 	context.world = _world
 	var registry = _world.component_registry
 	var entity_id = registry._ensure_entity_id(node)
 	context._entity_id = entity_id
-	for comp in components:
-		var comp_name = comp.get_global_name()
-		var comp_value = registry.get_component_ref(entity_id, comp_name)
-		if comp_value != null:
-			context.original_components[comp_name] = comp_value
+	if comp_names.size() > 0:
+		for i in components.size():
+			var comp_value = registry.get_component_ref(entity_id, comp_names[i])
+			if comp_value != null:
+				context.original_components[comp_names[i]] = comp_value
+	else:
+		for comp in components:
+			var comp_name = comp.get_global_name()
+			var comp_value = registry.get_component_ref(entity_id, comp_name)
+			if comp_value != null:
+				context.original_components[comp_name] = comp_value
 	context.payload = null
 	context.result.reset()
 	context._node = node
@@ -333,7 +347,7 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 	var context = context_override
 	var is_root_pipeline = false
 	if context_override == null:
-		context = _create_context_from_node(node, data["requires"] + data["optional"])
+		context = _create_context_from_node(node, data["requires"] + data["optional"], data["_component_names"])
 		is_root_pipeline = true
 	context.result.reset()
 	if payload != null:
@@ -375,9 +389,11 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload = null) -> Dictionary:
 	var registry = _world.component_registry
 	var all_comps = data["requires"] + data["optional"]
+	var comp_names: Array = data["_component_names"]
 	var stage_keys = data["_stage_keys"]
 	var stages = data["stages"]
 	var is_oneshot = data.get("oneshot", null)
+	var comp_count = all_comps.size()
 
 	var node_results = {}
 	for node in nodes:
@@ -387,11 +403,10 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 		# stores original refs without cloning; clones happen lazily on first access
 		var entity_id = registry._ensure_entity_id(node)
 		context._entity_id = entity_id
-		for comp in all_comps:
-			var comp_name = comp.get_global_name()
-			var comp_value = registry.get_component_ref(entity_id, comp_name)
+		for i in comp_count:
+			var comp_value = registry.get_component_ref(entity_id, comp_names[i])
 			if comp_value != null:
-				context.original_components[comp_name] = comp_value
+				context.original_components[comp_names[i]] = comp_value
 		context.payload = payload
 		context._node = node
 
