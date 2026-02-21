@@ -94,6 +94,10 @@ var original_components = {}
 
 var _entity_id: int = -1
 
+# pre-resolved ReadOnly property names -> original component refs,
+# built at context setup to avoid per-access string ops in _get()
+var _readonly_cache = {}
+
 var node_property_cache
 var _property_dict = {}
 
@@ -112,9 +116,14 @@ func _get(property):
 		return clone
 	# ReadOnly prefix: return original component ref without cloning.
 	# This is a foot-gun by design -- mutations go straight to the registry.
+	# Cache is pre-built at context setup to avoid per-access string ops.
+	# Fallback handles manually-constructed contexts without cache population.
+	if _readonly_cache.has(property):
+		return _readonly_cache[property]
 	if property is StringName and property.begins_with(&"ReadOnly"):
 		var real_name = property.substr(8)
 		if original_components.has(real_name):
+			_readonly_cache[property] = original_components[real_name]
 			return original_components[real_name]
 		return null
 	# backing dictionary for arbitrary properties set via _set
@@ -134,6 +143,7 @@ func reset():
 	_entity_id = -1
 	components.clear()
 	original_components.clear()
+	_readonly_cache.clear()
 	payload = null
 	# result is NOT reset here -- callers may still hold a reference to it
 	# from the return dict. It gets reset on next acquire in _create_context_from_node.

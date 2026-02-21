@@ -299,6 +299,9 @@ func _create_context_from_node(node: Node, components: Array, comp_names: Array 
 			var comp_value = registry.get_component_ref(entity_id, comp_name)
 			if comp_value != null:
 				context.original_components[comp_name] = comp_value
+	# pre-build ReadOnly cache so _get() avoids per-access string ops
+	for key in context.original_components:
+		context._readonly_cache[&"ReadOnly" + key] = context.original_components[key]
 	context.payload = null
 	context.result.reset()
 	context._node = node
@@ -417,6 +420,9 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 			var comp_value = registry.get_component_ref(entity_id, comp_names[i])
 			if comp_value != null:
 				context.original_components[comp_names[i]] = comp_value
+		# pre-build ReadOnly cache so _get() avoids per-access string ops
+		for key in context.original_components:
+			context._readonly_cache[&"ReadOnly" + key] = context.original_components[key]
 		context.payload = payload
 		context._node = node
 
