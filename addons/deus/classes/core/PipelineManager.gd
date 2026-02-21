@@ -35,10 +35,65 @@ var _context_pool: Array = []
 # pool of reusable PipelineResult objects to avoid per-run allocation
 var _result_pool: Array = []
 
+# cached PipelineContext per pipeline per entity: entity_id -> { pipeline_class -> PipelineContext }
+# avoids per-frame context setup/teardown for entities whose component topology is stable
+var _context_cache: Dictionary = {}
+
 var _world: DeusWorld
 
 func _init(world: DeusWorld):
 	_world = world
+
+# connects component topology signals to invalidate cached contexts.
+# must be called after component_registry is initialized.
+func connect_cache_invalidation() -> void:
+	var reg = _world.component_registry
+	reg.component_added.connect(_on_entity_topology_changed)
+	reg.component_removed.connect(_on_entity_topology_changed_3arg)
+	reg.component_removed_all.connect(_on_entity_topology_changed_3arg)
+
+# invalidation callback for component_added (4 args: node, entity_id, name, component)
+func _on_entity_topology_changed(_node: Node, entity_id: int, _comp_name: String, _comp = null) -> void:
+	_context_cache.erase(entity_id)
+
+# invalidation callback for component_removed / component_removed_all (3 args: node, entity_id, name)
+func _on_entity_topology_changed_3arg(_node: Node, entity_id: int, _comp_name: String) -> void:
+	_context_cache.erase(entity_id)
+
+# returns a cached PipelineContext for (pipeline, entity) or creates one on first access.
+# on cache hit, only clears write buffers via light_reset().
+func _get_or_create_cached_context(
+	pipeline_class: Script,
+	node: Node,
+	entity_id: int,
+	all_comps: Array,
+	comp_names: Array
+) -> PipelineContext:
+	var entity_cache = _context_cache.get(entity_id)
+	if entity_cache == null:
+		entity_cache = {}
+		_context_cache[entity_id] = entity_cache
+
+	var context = entity_cache.get(pipeline_class)
+	if context != null:
+		context.light_reset()
+		return context
+
+	# cold path: first time this entity runs this pipeline
+	context = PipelineContext.new()
+	context._node = node
+	context.world = _world
+	context._entity_id = entity_id
+	var registry = _world.component_registry
+	for i in comp_names.size():
+		var comp_value = registry.get_component_ref(entity_id, comp_names[i])
+		if comp_value != null:
+			context.original_components[comp_names[i]] = comp_value
+	# pre-build ReadOnly cache
+	for key in context.original_components:
+		context._readonly_cache[&"ReadOnly" + key] = context.original_components[key]
+	entity_cache[pipeline_class] = context
+	return context
 
 # retrieves pipeline components and their types
 func _get_pipeline_class_components(pipeline_class: Script) -> Dictionary:
@@ -179,6 +234,9 @@ func deregister_pipeline(pipeline_class: Script) -> void:
 		pipeline_result_handlers.erase(name)
 		_resolved_injections.erase(pipeline_class)
 		_resolved_result_handlers.erase(pipeline_class)
+		# purge cached contexts for this pipeline from all entities
+		for entity_id in _context_cache:
+			_context_cache[entity_id].erase(pipeline_class)
 
 		pipeline_deregistered.emit(pipeline_class)
 
@@ -405,9 +463,8 @@ func run(pipeline_class: Script, node: Node, payload = null, context_override = 
 	# would benefit from pooling, but that requires a different pattern.
 	return {"context": context, "result": context.result}
 
-# batch-execute a pipeline over multiple pre-matched nodes
-# acquires a pooled context per entity and releases it after use.
-# node_results holds each entity's PipelineResult; the context itself does not escape.
+# batch-execute a pipeline over multiple pre-matched nodes.
+# uses cached PipelineContext per (pipeline, entity) -- only write buffers are cleared each frame.
 # returns node -> PipelineResult matching the single-node run() contract.
 func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload = null) -> Dictionary:
 	var registry = _world.component_registry
@@ -416,25 +473,14 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 	var stage_keys = data["_stage_keys"]
 	var stages = data["stages"]
 	var is_oneshot = data.get("oneshot", null)
-	var comp_count = all_comps.size()
-
 	var node_results = {}
 	for node in nodes:
-		var context := _acquire_context()
-		context.world = _world
-		# populate context for this entity (inline _create_context_from_node)
-		# stores original refs without cloning; clones happen lazily on first access
 		var entity_id = registry._ensure_entity_id(node)
-		context._entity_id = entity_id
-		for i in comp_count:
-			var comp_value = registry.get_component_ref(entity_id, comp_names[i])
-			if comp_value != null:
-				context.original_components[comp_names[i]] = comp_value
-		# pre-build ReadOnly cache so _get() avoids per-access string ops
-		for key in context.original_components:
-			context._readonly_cache[&"ReadOnly" + key] = context.original_components[key]
-		context.payload = payload
-		context._node = node
+		var context = _get_or_create_cached_context(
+			pipeline_class, node, entity_id, all_comps, comp_names
+		)
+		if payload != null:
+			context.payload = payload
 
 		# stage execution loop
 		for stage in stage_keys:
@@ -461,9 +507,7 @@ func run_batch(pipeline_class: Script, nodes: Array, data: Dictionary, payload =
 
 		_run_result_handlers(pipeline_class, node, context, context.result.state)
 
-		# snapshot result before releasing context back to pool
-		# _acquire_context gives a fresh PipelineResult so this ref stays valid
+		# context stays in cache; snapshot result ref for caller
 		node_results[node] = context.result
-		_release_context(context)
 
 	return node_results

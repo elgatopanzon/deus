@@ -150,6 +150,17 @@ func reset():
 	node_property_cache.reset()
 	_property_dict.clear()
 
+# clears only write buffers and per-frame state, preserving constant fields
+# (_node, world, _entity_id, original_components, _readonly_cache).
+# used by context caching where these fields are stable across frames.
+func light_reset():
+	components.clear()
+	_property_dict.clear()
+	node_property_cache._cache.clear()
+	node_property_cache._child_node_caches.clear()
+	result.reset()
+	payload = null
+
 func has_pending_component_writes() -> bool:
 	return components.size() > 0
 

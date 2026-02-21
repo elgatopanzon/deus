@@ -32,6 +32,9 @@ func _init():
 	node_registry = NodeRegistry.new()
 	resource_registry = ResourceRegistry.new()
 
+	# wire component topology signals to pipeline context cache invalidation
+	pipeline_manager.connect_cache_invalidation()
+
 	# scheduler
 	pipeline_scheduler = PipelineScheduler.new(self)
 	PipelineSchedulerDefaults.init_default_environment(pipeline_scheduler)
