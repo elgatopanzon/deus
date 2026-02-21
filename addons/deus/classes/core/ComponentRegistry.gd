@@ -32,6 +32,7 @@ var _component_bit_index = {} # component_name -> int bit position
 var _next_bit_index: int = 0
 var _entity_bitmask = {} # entity_id -> int bitmask of owned components
 var _filter_bitmask_cache = {} # cache key -> [require_mask, exclude_mask]
+var _entity_id_cache = {} # Node -> int, avoids double node meta lookups in _ensure_entity_id
 
 func _init(world: DeusWorld):
 	_world = world
@@ -54,10 +55,13 @@ func _build_filter_bitmask(components: Array) -> int:
 	return mask
 
 func _ensure_entity_id(node: Node) -> int:
-	if not node.has_meta("entity_id"):
-		node.set_meta("entity_id", next_entity_id)
+	var id = _entity_id_cache.get(node, -1)
+	if id == -1:
+		id = next_entity_id
 		next_entity_id += 1
-	return node.get_meta("entity_id")
+		_entity_id_cache[node] = id
+		node.set_meta("entity_id", id)  # keep for external access
+	return id
 
 func _get_sparse_set(component_name: String) -> SparseSet:
 	if not component_sets.has(component_name):
@@ -182,6 +186,7 @@ func remove_component(node: Node, component_name: String) -> void:
 		node_components[node].erase(component_name)
 		if node_components[node].size() == 0:
 			node_components.erase(node)
+			_entity_id_cache.erase(node)
 			component_removed_all.emit(node, entity_id, component_name)
 
 func remove_all_components(node: Node) -> void:
@@ -196,8 +201,9 @@ func remove_all_components(node: Node) -> void:
 			_component_nodes[component_name].erase(node)
 		component_removed.emit(node, entity_id, component_name)
 	node_components.erase(node)
-	# clear entire entity bitmask
+	# clear entire entity bitmask and cached entity ID
 	_entity_bitmask.erase(entity_id)
+	_entity_id_cache.erase(node)
 	_invalidate_matching_cache()
 	if comp_names.size() > 0:
 		component_removed_all.emit(node, entity_id, comp_names[-1])
